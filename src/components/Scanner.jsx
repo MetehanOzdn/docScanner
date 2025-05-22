@@ -15,6 +15,7 @@ const Scanner = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [error, setError] = useState(null);
     const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0, displayWidth: 0, displayHeight: 0 });
+    const [generatedPdfs, setGeneratedPdfs] = useState([]); // [{name, data, timestamp}]
 
     const videoConstraints = {
         width: { ideal: 720 },
@@ -216,7 +217,7 @@ const Scanner = () => {
         return h;
     };
 
-    const handleDownloadPdf = async () => {
+    const handleApprovePdf = async () => {
         if (corners.length !== 4 || !capturedImage || !imageRef.current) {
             setError("PDF oluşturmak için lütfen 4 köşe seçin.");
             return;
@@ -372,7 +373,23 @@ const Scanner = () => {
             });
             const pdfImgData = outputCanvas.toDataURL('image/jpeg', 0.92);
             pdf.addImage(pdfImgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
-            pdf.save(`scanned-document-${Date.now()}.pdf`);
+
+            // Instead of saving the PDF directly, store it in state
+            const timestamp = Date.now();
+            const pdfName = `belge-${timestamp}`;
+            const pdfData = pdf.output('datauristring');
+
+            setGeneratedPdfs(prev => [...prev, {
+                name: pdfName,
+                data: pdfData,
+                timestamp: timestamp,
+                thumbnail: pdfImgData
+            }]);
+
+            // Reset to capture mode after successful PDF generation
+            setMode('capture');
+            setCapturedImage(null);
+            setCorners([]);
 
         } catch (err) {
             console.error("PDF Generation Error:", err);
@@ -380,6 +397,14 @@ const Scanner = () => {
         } finally {
             setIsProcessing(false);
         }
+    };
+
+    const handleDownloadPdf = (pdfData, pdfName) => {
+        // Create a link and trigger download
+        const link = document.createElement('a');
+        link.href = pdfData;
+        link.download = `${pdfName}.pdf`;
+        link.click();
     };
 
     const resetState = () => {
@@ -395,6 +420,10 @@ const Scanner = () => {
             const ctx = canvas.getContext('2d');
             if (canvas.width > 0 && canvas.height > 0) ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
+    };
+
+    const deletePdf = (timestamp) => {
+        setGeneratedPdfs(prev => prev.filter(pdf => pdf.timestamp !== timestamp));
     };
 
     const renderCaptureMode = () => (
@@ -473,13 +502,67 @@ const Scanner = () => {
                     <button onClick={initializeCorners} style={{ ...styles.button, ...styles.buttonSecondary }} disabled={!imageRef.current || !capturedImage}>
                         Köşeleri Sıfırla
                     </button>
-                    <button onClick={handleDownloadPdf} disabled={isProcessing || corners.length !== 4} style={{ ...styles.button, ...styles.buttonPrimary }}>
-                        {isProcessing ? "PDF Oluşturuluyor..." : "PDF Olarak İndir"}
+                    <button onClick={handleApprovePdf} disabled={isProcessing || corners.length !== 4} style={{ ...styles.button, ...styles.buttonPrimary }}>
+                        {isProcessing ? "İşleniyor..." : "Onayla"}
                     </button>
                 </div>
             </div>
         </div>
     );
+
+    const renderPdfList = () => {
+        if (generatedPdfs.length === 0) return null;
+
+        return (
+            <div style={styles.pdfListContainer}>
+                <h2 style={styles.title}>Taranmış Belgeler</h2>
+                <div style={styles.pdfGrid}>
+                    {generatedPdfs.map((pdf) => (
+                        <div key={pdf.timestamp} style={styles.pdfCard}>
+                            <div style={styles.thumbnailContainer}>
+                                <img src={pdf.thumbnail} alt="PDF Önizleme" style={styles.thumbnail} />
+                            </div>
+                            <div style={styles.pdfInfo}>
+                                <span style={styles.pdfName}>{pdf.name}</span>
+                                <span style={styles.pdfDate}>
+                                    {new Date(pdf.timestamp).toLocaleDateString()}
+                                </span>
+                            </div>
+                            <div style={styles.pdfActions}>
+                                <button
+                                    onClick={() => handleDownloadPdf(pdf.data, pdf.name)}
+                                    style={styles.actionButton}
+                                >
+                                    İndir
+                                </button>
+                                <button
+                                    onClick={() => deletePdf(pdf.timestamp)}
+                                    style={{ ...styles.actionButton, ...styles.deleteButton }}
+                                >
+                                    Sil
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                {generatedPdfs.length > 0 && (
+                    <button
+                        onClick={handleSendDocuments}
+                        style={{ ...styles.button, ...styles.buttonPrimary, ...styles.sendButton }}
+                    >
+                        Gönder
+                    </button>
+                )}
+            </div>
+        );
+    };
+
+    const handleSendDocuments = () => {
+        console.log("Gönderilen belgeler:");
+        generatedPdfs.forEach(pdf => {
+            console.log(pdf.name);
+        });
+    };
 
     return (
         <div style={styles.appContainer}>
@@ -490,6 +573,7 @@ const Scanner = () => {
                 </div>
             )}
             {mode === 'capture' ? renderCaptureMode() : renderEditMode()}
+            {renderPdfList()}
         </div>
     );
 };
@@ -671,7 +755,89 @@ const styles = {
         fontWeight: 'bold',
         padding: '0 5px',
         lineHeight: '1',
-    }
+    },
+    pdfListContainer: {
+        width: '100%',
+        maxWidth: '900px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        padding: '20px 10px',
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        boxShadow: '0 4px 15px rgba(0,0,0,0.07)',
+        marginTop: '20px',
+    },
+    pdfGrid: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+        gap: '15px',
+        width: '100%',
+        padding: '10px 0',
+    },
+    pdfCard: {
+        border: '1px solid #e0e0e0',
+        borderRadius: '8px',
+        overflow: 'hidden',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        backgroundColor: '#fff',
+        display: 'flex',
+        flexDirection: 'column',
+    },
+    thumbnailContainer: {
+        height: '150px',
+        overflow: 'hidden',
+        backgroundColor: '#f5f5f5',
+    },
+    thumbnail: {
+        width: '100%',
+        height: '100%',
+        objectFit: 'contain',
+    },
+    pdfInfo: {
+        padding: '10px',
+        borderBottom: '1px solid #eee',
+        display: 'flex',
+        flexDirection: 'column',
+    },
+    pdfName: {
+        fontWeight: '500',
+        color: '#333',
+        marginBottom: '5px',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+    },
+    pdfDate: {
+        fontSize: '0.8em',
+        color: '#777',
+    },
+    pdfActions: {
+        display: 'flex',
+        padding: '10px',
+        justifyContent: 'space-between',
+    },
+    actionButton: {
+        padding: '8px',
+        fontSize: '0.9em',
+        backgroundColor: '#007bff',
+        color: 'white',
+        border: 'none',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        flexGrow: 1,
+        marginRight: '5px',
+    },
+    deleteButton: {
+        backgroundColor: '#dc3545',
+        marginRight: '0',
+    },
+    sendButton: {
+        backgroundColor: '#28a745',
+        marginTop: '20px',
+        width: '200px',
+        fontSize: '1em',
+    },
 };
 
 export default Scanner; 

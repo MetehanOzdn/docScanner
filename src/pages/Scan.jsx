@@ -23,9 +23,12 @@ export default function ScanPage() {
                         <ul style={styles.scannedFilesList}>
                             {scannedFiles.map((file, index) => (
                                 <li key={index} style={styles.scannedFileItem}>
-                                    {/* Assuming 'file' is a string, e.g., filename or image URL */}
-                                    {/* You might want to render an image or a link here depending on what 'file' is */}
-                                    {typeof file === 'string' ? file : `Belge ${index + 1}`}
+                                    {/* Assuming 'file' is a string (data URL) from the scanner */}
+                                    {typeof file === 'string' && file.startsWith('data:image') ? (
+                                        <img src={file} alt={`Taranan Belge ${index + 1}`} style={styles.scannedImagePreview} />
+                                    ) : (
+                                        typeof file === 'string' ? file : `Belge ${index + 1}`
+                                    )}
                                 </li>
                             ))}
                         </ul>
@@ -98,14 +101,30 @@ const styles = {
         listStyleType: 'none',
         padding: '0',
         margin: '0',
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '10px',
     },
     scannedFileItem: {
-        padding: '8px 0',
-        borderBottom: '1px solid #eee',
+        padding: '8px',
+        border: '1px solid #eee',
         fontSize: '0.9rem',
         color: '#444',
-        ':last-child': {
-            borderBottom: 'none',
-        }
+        borderRadius: '4px',
+        backgroundColor: '#fafafa',
+        width: '150px',
+        height: '200px',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        textAlign: 'center',
+    },
+    scannedImagePreview: {
+        maxWidth: '100%',
+        maxHeight: '150px',
+        borderRadius: '4px',
+        marginBottom: '5px',
+        objectFit: 'contain',
     }
 }; 
