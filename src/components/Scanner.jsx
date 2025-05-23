@@ -16,6 +16,7 @@ const Scanner = () => {
     const [error, setError] = useState(null);
     const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0, displayWidth: 0, displayHeight: 0 });
     const [generatedPdfs, setGeneratedPdfs] = useState([]); // [{name, data, timestamp}]
+    const [actualCameraDimensions, setActualCameraDimensions] = useState({ width: 0, height: 0 });
 
     const videoConstraints = {
         width: { ideal: 720 },
@@ -32,7 +33,17 @@ const Scanner = () => {
             setError("Kamera bulunamadı.");
             return;
         }
-        const imageSrc = webcamRef.current.getScreenshot();
+
+        const { width: streamWidth, height: streamHeight } = actualCameraDimensions;
+        let imageSrc;
+
+        if (streamWidth > 0 && streamHeight > 0) {
+            imageSrc = webcamRef.current.getScreenshot({ width: streamWidth, height: streamHeight });
+        } else {
+            // Fallback if actualCameraDimensions are not yet reliably set
+            imageSrc = webcamRef.current.getScreenshot();
+        }
+
         if (!imageSrc) {
             setError("Görüntü yakalanamadı.");
             return;
@@ -42,7 +53,7 @@ const Scanner = () => {
         setCorners([]);
         setActiveCornerIndex(null);
         clearError();
-    }, [webcamRef]);
+    }, [webcamRef, actualCameraDimensions]);
 
     const initializeCorners = useCallback(() => {
         if (!imageRef.current || !capturedImage) return;
@@ -371,8 +382,8 @@ const Scanner = () => {
                 unit: 'mm',
                 format: 'a4',
             });
-            const pdfImgData = outputCanvas.toDataURL('image/jpeg', 0.92);
-            pdf.addImage(pdfImgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+            const pdfImgData = outputCanvas.toDataURL('image/png');
+            pdf.addImage(pdfImgData, 'PNG', 0, 0, 210, 297, undefined, 'NONE');
 
             // Instead of saving the PDF directly, store it in state
             const timestamp = Date.now();
@@ -432,15 +443,26 @@ const Scanner = () => {
             <div style={styles.captureContainer}>
                 <h2 style={styles.title}>Adım 1: Görüntü Yakala</h2>
                 <p style={styles.instructions}>Belgenizi kameraya net bir şekilde gösterin ve yakalayın.</p>
-                <div style={styles.webcamWrapper}>
+                <div style={{
+                    ...styles.webcamWrapper,
+                    aspectRatio: actualCameraDimensions.width && actualCameraDimensions.height ?
+                        `${actualCameraDimensions.width} / ${actualCameraDimensions.height}` :
+                        styles.webcamWrapper.aspectRatio // Fallback to default
+                }}>
                     <Webcam
                         audio={false}
                         ref={webcamRef}
-                        screenshotFormat="image/jpeg"
+                        screenshotFormat="image/png"
                         videoConstraints={videoConstraints}
                         onUserMediaError={(err) => setError(`Kamera hatası: ${err.name}. Tarayıcı ayarlarını kontrol edin.`)}
+                        onUserMedia={() => {
+                            if (webcamRef.current && webcamRef.current.video && webcamRef.current.video.videoWidth && webcamRef.current.video.videoHeight) {
+                                const video = webcamRef.current.video;
+                                setActualCameraDimensions({ width: video.videoWidth, height: video.videoHeight });
+                            }
+                        }}
                         style={styles.webcam}
-                        mirrored={true}
+                        mirrored={false}
                     />
                 </div>
                 <button onClick={handleCapture} disabled={isProcessing} style={{ ...styles.button, ...styles.buttonPrimary }}>
@@ -659,7 +681,7 @@ const styles = {
         position: 'relative',
         width: '100%',
         maxWidth: '450px',
-        maxHeight: '70vh',
+        height: 'auto',
         overflow: 'hidden',
         border: '2px dashed #bdc3c7',
         backgroundColor: '#f8f9fa',
@@ -670,10 +692,11 @@ const styles = {
     },
     previewImage: {
         display: 'block',
-        maxWidth: '100%',
-        maxHeight: 'calc(70vh - 4px)',
+        width: '100%',
+        height: 'auto',
         userSelect: 'none',
         objectFit: 'contain',
+        maxWidth: '100%',
     },
     previewCanvas: {
         position: 'absolute',

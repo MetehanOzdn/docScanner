@@ -4,4 +4,16 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  server: {
+    proxy: {
+      // string shorthand for simple targets
+      // '/foo': 'http://localhost:4567',
+      // with options
+      '/api': {
+        target: 'http://localhost',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '/InterPacs.WebDicomUpload/api'),
+      },
+    }
+  }
 })

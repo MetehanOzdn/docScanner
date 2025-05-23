@@ -1,34 +1,68 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const DevicesList = () => {
     const navigate = useNavigate();
-    const devices = Array.from({ length: 20 }, (_, index) => ({
-        id: index + 1,
-        name: `device ${index + 1}`,
-        email: `device${index + 1}@example.com`,
-        avatar: `https://i.pravatar.cc/100?u=hasta${index + 1}` // daha büyük avatar
-    }));
+    const [devices, setDevices] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        const fetchDevices = async () => {
+            try {
+                setLoading(true);
+                console.log("response");
+                const response = await fetch('/api/Device');
+                console.log(response);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+
+                setDevices(data);
+
+                setError(null);
+            } catch (e) {
+                console.error("Failed to fetch devices:", e);
+                setError("Cihazlar yüklenemedi: " + e.message);
+                setDevices([]); // Hata durumunda boş dizi ata
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchDevices();
+    }, []);
+
+    if (loading) {
+        return <div style={styles.centeredMessage}>Yükleniyor...</div>;
+    }
+
+    if (error) {
+        return <div style={{ ...styles.centeredMessage, ...styles.errorMessage }}>{error}</div>;
+    }
 
     return (
         <div style={styles.pageContainer}>
             <header style={styles.header}>
-                <h1 style={styles.mainTitle}>Device List</h1>
-                <p style={styles.subTitle}>{devices.length} Device bulundu.</p>
+                <h1 style={styles.mainTitle}>Cihaz Listesi</h1>
+                <p style={styles.subTitle}>
+                    {devices.length > 0 ? `${devices.length} cihaz bulundu.` : "Cihaz bulunamadı."}
+                </p>
             </header>
             <div style={styles.listContainer}>
                 {devices.map(device => (
-                    <div key={device.id} style={styles.deviceItem} onClick={() => navigate('/users')}>
-                        <img src={device.avatar} alt={`${device.name} avatar`} style={styles.avatar} />
+                    <div key={device.id} style={styles.deviceItem} onClick={() => navigate('/users')}> {/* Gecici olarak /users'a yonlendiriyor */}
                         <div style={styles.userInfo}>
-                            <h2 style={styles.userName}>{device.name}</h2>
-                            <p style={styles.userEmail}>{device.email}</p>
+                            <h2 style={styles.userName}>{device.Name}</h2>
+                            <p style={styles.deviceDetail}>AET: {device.AET}</p>
+                            <p style={styles.deviceDetail}>Modality: {device.Modality}</p>
                         </div>
                     </div>
                 ))}
             </div>
             <footer style={styles.footer}>
-                <p>© {new Date().getFullYear()} Hasta Yönetimi</p>
+                <p>© {new Date().getFullYear()} Cihaz Yönetimi</p>
             </footer>
         </div>
     );
@@ -69,13 +103,14 @@ const styles = {
         width: '100%',
         maxWidth: '900px',
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', // Adjusted minmax for better fit
         gap: '15px',
         padding: '0',
     },
     deviceItem: {
         display: 'flex',
         flexDirection: 'column',
+        justifyContent: 'center', // Center content vertically
         alignItems: 'center',
         backgroundColor: '#ffffff',
         padding: '16px',
@@ -84,36 +119,33 @@ const styles = {
         transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
         overflow: 'hidden',
         cursor: 'pointer',
-        aspectRatio: '1 / 1', // kare görünüm
+        aspectRatio: '1 / 1',
         boxSizing: 'border-box',
-    },
-    avatar: {
-        width: '70px',
-        height: '70px',
-        borderRadius: '50%',
-        border: '2px solid #eee',
-        marginBottom: '10px',
+        textAlign: 'center', // Center text
     },
     userInfo: {
         textAlign: 'center',
         overflow: 'hidden',
+        width: '100%', // Ensure userInfo takes full width for text centering
     },
     userName: {
-        fontSize: '1em',
+        fontSize: '1.1em', // Slightly larger name
         color: '#333',
-        margin: '0 0 4px 0',
+        margin: '0 0 8px 0', // Increased bottom margin
         fontWeight: '600',
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
+        width: '100%', // Ensure it takes full width for ellipsis
     },
-    userEmail: {
-        fontSize: '0.85em',
-        color: '#666',
-        margin: '0',
+    deviceDetail: { // New style for AET and Modality
+        fontSize: '0.9em',
+        color: '#555',
+        margin: '4px 0',
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
+        width: '100%',
     },
     footer: {
         width: '100%',
@@ -125,6 +157,18 @@ const styles = {
         color: '#777',
         borderTop: '1px solid #ddd',
     },
+    centeredMessage: {
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '80vh',
+        fontSize: '1.2em',
+        color: '#555',
+    },
+    errorMessage: {
+        color: '#d32f2f', // A common error color
+        fontWeight: '500',
+    }
 };
 
 export default DevicesList;
