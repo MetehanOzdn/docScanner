@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import Webcam from 'react-webcam';
 import ExampleButton from './ExampleButton';
-import { jsPDF } from 'jspdf';
 
 const Scanner = () => {
     const webcamRef = useRef(null);
@@ -15,7 +14,7 @@ const Scanner = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [error, setError] = useState(null);
     const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0, displayWidth: 0, displayHeight: 0 });
-    const [generatedPdfs, setGeneratedPdfs] = useState([]); // [{name, data, timestamp}]
+    const [generatedImages, setGeneratedImages] = useState([]); // Renamed from generatedPdfs: [{name, data, timestamp, thumbnail}]
     const [actualCameraDimensions, setActualCameraDimensions] = useState({ width: 0, height: 0 });
 
     const videoConstraints = {
@@ -230,7 +229,7 @@ const Scanner = () => {
 
     const handleApprovePdf = async () => {
         if (corners.length !== 4 || !capturedImage || !imageRef.current) {
-            setError("PDF oluşturmak için lütfen 4 köşe seçin.");
+            setError("Görüntü kaydetmek için lütfen 4 köşe seçin.");
             return;
         }
         if (!imageDimensions.width || !imageDimensions.height || !imageDimensions.displayWidth || !imageDimensions.displayHeight) {
@@ -256,8 +255,10 @@ const Scanner = () => {
 
             const sourcePoints = corners.map(c => ({ x: c.x * scaleX, y: c.y * scaleY }));
 
+            // Set target dimensions to A4 paper aspect ratio (1:1.414)
+            // Use the original image width as base and calculate height accordingly
             const targetWidth = imgWidth;
-            const targetHeight = imgHeight;
+            const targetHeight = Math.round(imgWidth * 1.414); // A4 aspect ratio: height = width * 1.414
 
             const destPoints = [
                 { x: 0, y: 0 },
@@ -300,7 +301,7 @@ const Scanner = () => {
             originalImageElement.src = capturedImage;
             await new Promise((resolve, reject) => {
                 originalImageElement.onload = resolve;
-                originalImageElement.onerror = () => reject(new Error("Orijinal görüntü PDF için yüklenemedi"));
+                originalImageElement.onerror = () => reject(new Error("Orijinal görüntü işlenmek üzere yüklenemedi"));
             });
 
             const sourceCanvas = document.createElement('canvas');
@@ -377,44 +378,35 @@ const Scanner = () => {
             }
             ctx.putImageData(finalImageData, 0, 0);
 
-            const pdf = new jsPDF({
-                orientation: 'portrait',
-                unit: 'mm',
-                format: 'a4',
-            });
-            const pdfImgData = outputCanvas.toDataURL('image/png');
-            pdf.addImage(pdfImgData, 'PNG', 0, 0, 210, 297, undefined, 'NONE');
+            // Generate JPEG instead of PDF
+            const jpegImageData = outputCanvas.toDataURL('image/jpeg', 0.9); // Using 0.9 for quality
 
-            // Instead of saving the PDF directly, store it in state
             const timestamp = Date.now();
-            const pdfName = `belge-${timestamp}`;
-            const pdfData = pdf.output('datauristring');
+            const imageName = `goruntu-${timestamp}`;
 
-            setGeneratedPdfs(prev => [...prev, {
-                name: pdfName,
-                data: pdfData,
+            setGeneratedImages(prev => [...prev, {
+                name: imageName,
+                data: jpegImageData,
                 timestamp: timestamp,
-                thumbnail: pdfImgData
+                thumbnail: jpegImageData // Using the full image as thumbnail for simplicity
             }]);
 
-            // Reset to capture mode after successful PDF generation
             setMode('capture');
             setCapturedImage(null);
             setCorners([]);
 
         } catch (err) {
-            console.error("PDF Generation Error:", err);
-            setError(`PDF oluşturulamadı: ${err.message}`);
+            console.error("Görüntü Kaydetme Hatası:", err);
+            setError(`Görüntü kaydedilemedi: ${err.message}`);
         } finally {
             setIsProcessing(false);
         }
     };
 
-    const handleDownloadPdf = (pdfData, pdfName) => {
-        // Create a link and trigger download
+    const handleDownloadImage = (imageData, imageName) => { // Renamed from handleDownloadPdf
         const link = document.createElement('a');
-        link.href = pdfData;
-        link.download = `${pdfName}.pdf`;
+        link.href = imageData;
+        link.download = `${imageName}.jpeg`; // Changed extension to .jpeg
         link.click();
     };
 
@@ -433,8 +425,8 @@ const Scanner = () => {
         }
     };
 
-    const deletePdf = (timestamp) => {
-        setGeneratedPdfs(prev => prev.filter(pdf => pdf.timestamp !== timestamp));
+    const deleteImage = (timestamp) => { // Renamed from deletePdf
+        setGeneratedImages(prev => prev.filter(img => img.timestamp !== timestamp)); // Updated to setGeneratedImages
     };
 
     const renderCaptureMode = () => (
@@ -525,40 +517,40 @@ const Scanner = () => {
                         Köşeleri Sıfırla
                     </button>
                     <button onClick={handleApprovePdf} disabled={isProcessing || corners.length !== 4} style={{ ...styles.button, ...styles.buttonPrimary }}>
-                        {isProcessing ? "İşleniyor..." : "Onayla"}
+                        {isProcessing ? "İşleniyor..." : "Görüntüyü Kaydet"}
                     </button>
                 </div>
             </div>
         </div>
     );
 
-    const renderPdfList = () => {
-        if (generatedPdfs.length === 0) return null;
+    const renderImageList = () => {
+        if (generatedImages.length === 0) return null;
 
         return (
-            <div style={styles.pdfListContainer}>
-                <h2 style={styles.title}>Taranmış Belgeler</h2>
-                <div style={styles.pdfGrid}>
-                    {generatedPdfs.map((pdf) => (
-                        <div key={pdf.timestamp} style={styles.pdfCard}>
+            <div style={styles.imageListContainer}>
+                <h2 style={styles.title}>Kaydedilmiş Görüntüler</h2>
+                <div style={styles.imageGrid}>
+                    {generatedImages.map((image) => (
+                        <div key={image.timestamp} style={styles.imageCard}>
                             <div style={styles.thumbnailContainer}>
-                                <img src={pdf.thumbnail} alt="PDF Önizleme" style={styles.thumbnail} />
+                                <img src={image.thumbnail} alt="Görüntü Önizleme" style={styles.thumbnail} />
                             </div>
-                            <div style={styles.pdfInfo}>
-                                <span style={styles.pdfName}>{pdf.name}</span>
-                                <span style={styles.pdfDate}>
-                                    {new Date(pdf.timestamp).toLocaleDateString()}
+                            <div style={styles.imageInfo}>
+                                <span style={styles.imageName}>{image.name}</span>
+                                <span style={styles.imageDate}>
+                                    {new Date(image.timestamp).toLocaleDateString()}
                                 </span>
                             </div>
-                            <div style={styles.pdfActions}>
+                            <div style={styles.imageActions}>
                                 <button
-                                    onClick={() => handleDownloadPdf(pdf.data, pdf.name)}
+                                    onClick={() => handleDownloadImage(image.data, image.name)}
                                     style={styles.actionButton}
                                 >
                                     İndir
                                 </button>
                                 <button
-                                    onClick={() => deletePdf(pdf.timestamp)}
+                                    onClick={() => deleteImage(image.timestamp)}
                                     style={{ ...styles.actionButton, ...styles.deleteButton }}
                                 >
                                     Sil
@@ -567,12 +559,12 @@ const Scanner = () => {
                         </div>
                     ))}
                 </div>
-                {generatedPdfs.length > 0 && (
+                {generatedImages.length > 0 && (
                     <button
                         onClick={handleSendDocuments}
                         style={{ ...styles.button, ...styles.buttonPrimary, ...styles.sendButton }}
                     >
-                        Gönder
+                        Görüntüleri Gönder
                     </button>
                 )}
             </div>
@@ -580,9 +572,9 @@ const Scanner = () => {
     };
 
     const handleSendDocuments = () => {
-        console.log("Gönderilen belgeler:");
-        generatedPdfs.forEach(pdf => {
-            console.log(pdf.name);
+        console.log("Gönderilecek görüntüler:");
+        generatedImages.forEach(image => {
+            console.log(image.name);
         });
     };
 
@@ -595,7 +587,7 @@ const Scanner = () => {
                 </div>
             )}
             {mode === 'capture' ? renderCaptureMode() : renderEditMode()}
-            {renderPdfList()}
+            {renderImageList()}
         </div>
     );
 };
@@ -779,7 +771,7 @@ const styles = {
         padding: '0 5px',
         lineHeight: '1',
     },
-    pdfListContainer: {
+    imageListContainer: {
         width: '100%',
         maxWidth: '900px',
         display: 'flex',
@@ -791,14 +783,14 @@ const styles = {
         boxShadow: '0 4px 15px rgba(0,0,0,0.07)',
         marginTop: '20px',
     },
-    pdfGrid: {
+    imageGrid: {
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
         gap: '15px',
         width: '100%',
         padding: '10px 0',
     },
-    pdfCard: {
+    imageCard: {
         border: '1px solid #e0e0e0',
         borderRadius: '8px',
         overflow: 'hidden',
@@ -811,19 +803,20 @@ const styles = {
         height: '150px',
         overflow: 'hidden',
         backgroundColor: '#f5f5f5',
+        objectFit: 'contain',
     },
     thumbnail: {
         width: '100%',
         height: '100%',
         objectFit: 'contain',
     },
-    pdfInfo: {
+    imageInfo: {
         padding: '10px',
         borderBottom: '1px solid #eee',
         display: 'flex',
         flexDirection: 'column',
     },
-    pdfName: {
+    imageName: {
         fontWeight: '500',
         color: '#333',
         marginBottom: '5px',
@@ -831,11 +824,11 @@ const styles = {
         overflow: 'hidden',
         textOverflow: 'ellipsis',
     },
-    pdfDate: {
+    imageDate: {
         fontSize: '0.8em',
         color: '#777',
     },
-    pdfActions: {
+    imageActions: {
         display: 'flex',
         padding: '10px',
         justifyContent: 'space-between',

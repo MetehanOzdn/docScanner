@@ -1,10 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route } from 'react-router-dom';
 
 import App from './App'; // Your main App component that might contain an <Outlet />
 import Home from './pages/Home';
-import UserList from './pages/UserList';
+import PatientList from './pages/PatientList';
 
 // Import global styles - adjust path if necessary
 import './index.css';
@@ -12,10 +12,10 @@ import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         <Route path="/*" element={<App />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   </React.StrictMode>
 );

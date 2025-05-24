@@ -1,38 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDevicesList } from '../hooks/useDevicesList'; // Import the custom hook
 
 const DevicesList = () => {
     const navigate = useNavigate();
-    const [devices, setDevices] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-
-    useEffect(() => {
-        const fetchDevices = async () => {
-            try {
-                setLoading(true);
-                console.log("response");
-                const response = await fetch('/api/Device');
-                console.log(response);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-
-                setDevices(data);
-
-                setError(null);
-            } catch (e) {
-                console.error("Failed to fetch devices:", e);
-                setError("Cihazlar yüklenemedi: " + e.message);
-                setDevices([]); // Hata durumunda boş dizi ata
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchDevices();
-    }, []);
+    const { devices, loading, error } = useDevicesList(); // Use the custom hook
 
     if (loading) {
         return <div style={styles.centeredMessage}>Yükleniyor...</div>;
@@ -52,11 +24,15 @@ const DevicesList = () => {
             </header>
             <div style={styles.listContainer}>
                 {devices.map(device => (
-                    <div key={device.id} style={styles.deviceItem} onClick={() => navigate('/users')}> {/* Gecici olarak /users'a yonlendiriyor */}
-                        <div style={styles.userInfo}>
-                            <h2 style={styles.userName}>{device.Name}</h2>
-                            <p style={styles.deviceDetail}>AET: {device.AET}</p>
-                            <p style={styles.deviceDetail}>Modality: {device.Modality}</p>
+                    <div key={device.id} style={styles.deviceItem} onClick={() => navigate('/patients', { state: { device } })}>
+                        <div style={styles.patientInfo}>
+                            <h2 style={styles.patientName}>{device.Name}</h2>
+                        </div>
+                        <div style={{ ...styles.buttonLabel, ...styles.aetBadge }}>
+                            {device.AET}
+                        </div>
+                        <div style={{ ...styles.buttonLabel, ...styles.modalityBadge }}>
+                            {device.Modality}
                         </div>
                     </div>
                 ))}
@@ -108,44 +84,51 @@ const styles = {
         padding: '0',
     },
     deviceItem: {
+        position: 'relative',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'center', // Center content vertically
+        justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#ffffff',
-        padding: '16px',
-        borderRadius: '12px',
-        boxShadow: '0 2px 6px rgba(0,0,0,0.07)',
-        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
-        overflow: 'hidden',
+        backgroundColor: '#fff',
+        padding: '20px',
+        borderRadius: '24px',
+        boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
         cursor: 'pointer',
         aspectRatio: '1 / 1',
         boxSizing: 'border-box',
-        textAlign: 'center', // Center text
+        color: '#fff',
+        overflow: 'hidden',
     },
-    userInfo: {
+    patientInfo: {
         textAlign: 'center',
         overflow: 'hidden',
-        width: '100%', // Ensure userInfo takes full width for text centering
-    },
-    userName: {
-        fontSize: '1.1em', // Slightly larger name
-        color: '#333',
-        margin: '0 0 8px 0', // Increased bottom margin
-        fontWeight: '600',
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        width: '100%', // Ensure it takes full width for ellipsis
-    },
-    deviceDetail: { // New style for AET and Modality
-        fontSize: '0.9em',
-        color: '#555',
-        margin: '4px 0',
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
         width: '100%',
+    },
+    patientName: {
+        fontSize: '1.5em',
+        fontWeight: 'bold',
+        color: '#000',
+        margin: '0',
+    },
+    deviceDetail: {
+        display: 'none', // Detayları gizle, buton olarak gösterilecek
+    },
+    buttonLabel: {
+        position: 'absolute',
+        bottom: '10px',
+        padding: '6px 14px',
+        borderRadius: '50px',
+        fontSize: '0.8em',
+        fontWeight: 'bold',
+        color: '#fff',
+    },
+    aetBadge: {
+        left: '10px',
+        backgroundColor: '#f44336', // Kırmızı
+    },
+    modalityBadge: {
+        right: '10px',
+        backgroundColor: '#673ab7', // Mor
     },
     footer: {
         width: '100%',
