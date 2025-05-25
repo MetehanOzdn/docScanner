@@ -85,7 +85,7 @@ const PatientList = () => {
                         <div
                             key={patient.id}
                             style={styles.patientItem}
-                            onClick={() => navigate('/scan', { state: { patient } })}
+                            onClick={() => navigate('/scan', { state: { patient, device } })}
                         >
                             <div style={{
                                 ...styles.genderAvatar,

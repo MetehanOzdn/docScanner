@@ -1,582 +1,245 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import Webcam from 'react-webcam';
-import ExampleButton from './ExampleButton';
+import ExampleButton from './ExampleButton'; // This import seems unused, consider removing if not needed.
+import useScannerController from '../hooks/useScannerController';
 
 const Scanner = () => {
-    const webcamRef = useRef(null);
-    const imageRef = useRef(null);
-    const previewCanvasRef = useRef(null);
+    const {
+        webcamRef,
+        imageRef,
+        previewCanvasRef,
+        mode,
+        capturedImage,
+        corners,
+        activeCornerIndex,
+        isProcessing,
+        error,
+        generatedImages,
+        actualCameraDimensions,
+        patientId,
+        setPatientId,
+        accessionNumber,
+        setAccessionNumber,
+        videoConstraints,
+        clearError,
+        handleCapture,
+        initializeCorners,
+        handleCornerClick,
+        handleImageAreaClick,
+        handleApprovePdf,
+        handleDownloadImage,
+        resetState,
+        deleteImage,
+        handleSendDocuments,
+        setError,
+        setActualCameraDimensions,
+        initialUrlCheckComplete,
+        sendResult,
+        setSendResult
+    } = useScannerController();
 
-    const [mode, setMode] = useState('capture'); // 'capture', 'edit'
-    const [capturedImage, setCapturedImage] = useState(null);
-    const [corners, setCorners] = useState([]); // [{x, y}, {x, y}, {x, y}, {x, y}]
-    const [activeCornerIndex, setActiveCornerIndex] = useState(null);
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [error, setError] = useState(null);
-    const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0, displayWidth: 0, displayHeight: 0 });
-    const [generatedImages, setGeneratedImages] = useState([]); // Renamed from generatedPdfs: [{name, data, timestamp, thumbnail}]
-    const [actualCameraDimensions, setActualCameraDimensions] = useState({ width: 0, height: 0 });
-
-    const videoConstraints = {
-        width: { ideal: 720 },
-        height: { ideal: 1280 },
-        aspectRatio: 9 / 16,
-        facingMode: "environment",
-        screenshotQuality: 1.0,
-    };
-
-    const clearError = () => setError(null);
-
-    const handleCapture = useCallback(() => {
-        if (!webcamRef.current) {
-            setError("Kamera bulunamadı.");
-            return;
-        }
-
-        const { width: streamWidth, height: streamHeight } = actualCameraDimensions;
-        let imageSrc;
-
-        if (streamWidth > 0 && streamHeight > 0) {
-            imageSrc = webcamRef.current.getScreenshot({ width: streamWidth, height: streamHeight });
-        } else {
-            // Fallback if actualCameraDimensions are not yet reliably set
-            imageSrc = webcamRef.current.getScreenshot();
-        }
-
-        if (!imageSrc) {
-            setError("Görüntü yakalanamadı.");
-            return;
-        }
-        setCapturedImage(imageSrc);
-        setMode('edit');
-        setCorners([]);
-        setActiveCornerIndex(null);
-        clearError();
-    }, [webcamRef, actualCameraDimensions]);
-
-    const initializeCorners = useCallback(() => {
-        if (!imageRef.current || !capturedImage) return;
-
-        const imageElement = imageRef.current;
-        const { offsetWidth: displayWidth, offsetHeight: displayHeight } = imageElement;
-
-        if (displayWidth === 0 || displayHeight === 0) {
-            setError("Görüntü ekran boyutları okunamadı. Lütfen tekrar deneyin veya farklı bir görüntü seçin.");
-            return;
-        }
-
-        const img = new Image();
-        img.onload = () => {
-            setImageDimensions({
-                width: img.naturalWidth,
-                height: img.naturalHeight,
-                displayWidth,
-                displayHeight,
-            });
-
-            const padding = Math.min(displayWidth, displayHeight) * 0.15;
-            setCorners([
-                { x: padding, y: padding },
-                { x: displayWidth - padding, y: padding },
-                { x: displayWidth - padding, y: displayHeight - padding },
-                { x: padding, y: displayHeight - padding },
-            ]);
-            setActiveCornerIndex(null);
-        };
-        img.onerror = () => {
-            setError("Görüntü doğal boyutları yüklenirken bir sorun oluştu.");
-        };
-        img.src = capturedImage;
-    }, [capturedImage]);
-
-    const handleCornerClick = (index, e) => {
-        e.stopPropagation();
-        if (activeCornerIndex === index) {
-            setActiveCornerIndex(null);
-        } else {
-            setActiveCornerIndex(index);
-        }
-    };
-
-    const handleImageAreaClick = useCallback((e) => {
-        if (activeCornerIndex === null || !imageRef.current) {
-            return;
-        }
-
-        const imageElement = imageRef.current;
-        const rect = imageElement.getBoundingClientRect();
-
-        let x = e.clientX - rect.left;
-        let y = e.clientY - rect.top;
-
-        x = Math.max(0, Math.min(x, imageElement.offsetWidth));
-        y = Math.max(0, Math.min(y, imageElement.offsetHeight));
-
-        setCorners(prevCorners =>
-            prevCorners.map((corner, i) =>
-                i === activeCornerIndex ? { x, y } : corner
-            )
-        );
-        setActiveCornerIndex(null);
-    }, [activeCornerIndex, imageRef, setCorners, setActiveCornerIndex]);
-
-    const drawPreview = useCallback(() => {
-        if (!previewCanvasRef.current || !imageRef.current || corners.length !== 4 || mode !== 'edit') {
-            if (previewCanvasRef.current) {
-                const canvas = previewCanvasRef.current;
-                const ctx = canvas.getContext('2d');
-                if (canvas.width > 0 && canvas.height > 0) {
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                }
-            }
-            return;
-        }
-
-        const canvas = previewCanvasRef.current;
-        const imageElement = imageRef.current;
-        const ctx = canvas.getContext('2d');
-
-        canvas.width = imageElement.offsetWidth;
-        canvas.height = imageElement.offsetHeight;
-
-        if (canvas.width === 0 || canvas.height === 0) return;
-
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        ctx.beginPath();
-        ctx.moveTo(corners[0].x, corners[0].y);
-        for (let i = 1; i < corners.length; i++) {
-            ctx.lineTo(corners[i].x, corners[i].y);
-        }
-        ctx.closePath();
-
-        ctx.save();
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.fill();
-        ctx.restore();
-
-        ctx.strokeStyle = '#007bff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-    }, [corners, mode]);
-
-    useEffect(() => {
-        drawPreview();
-    }, [drawPreview]);
-
-    const adj = (m) => {
-        return [
-            m[4] * m[8] - m[5] * m[7], m[2] * m[7] - m[1] * m[8], m[1] * m[5] - m[2] * m[4],
-            m[5] * m[6] - m[3] * m[8], m[0] * m[8] - m[2] * m[6], m[2] * m[3] - m[0] * m[5],
-            m[3] * m[7] - m[4] * m[6], m[1] * m[6] - m[0] * m[7], m[0] * m[4] - m[1] * m[3]
-        ];
-    };
-
-    const getPerspectiveTransform = (src, dst) => {
-        const p = [];
-        for (let i = 0; i < 4; i++) {
-            p.push([src[i].x, src[i].y, 1, 0, 0, 0, -src[i].x * dst[i].x, -src[i].y * dst[i].x, dst[i].x]);
-            p.push([0, 0, 0, src[i].x, src[i].y, 1, -src[i].x * dst[i].y, -src[i].y * dst[i].y, dst[i].y]);
-        }
-
-        const M = new Array(8).fill(0).map(() => new Array(9).fill(0));
-        for (let i = 0; i < 8; i++) {
-            for (let j = 0; j < 9; j++) {
-                M[i][j] = p[i][j];
-            }
-        }
-
-        for (let i = 0; i < 8; i++) {
-            let maxRow = i;
-            for (let k = i + 1; k < 8; k++) {
-                if (Math.abs(M[k][i]) > Math.abs(M[maxRow][i])) {
-                    maxRow = k;
-                }
-            }
-            [M[i], M[maxRow]] = [M[maxRow], M[i]];
-
-            if (Math.abs(M[i][i]) < 1e-9) {
-                console.warn("Matrix is singular or nearly singular at step", i);
-                continue;
-            }
-
-            for (let k = i + 1; k < 8; k++) {
-                const factor = M[k][i] / M[i][i];
-                if (!isFinite(factor)) continue;
-                for (let j = i; j < 9; j++) {
-                    if (isFinite(M[i][j])) M[k][j] -= factor * M[i][j];
-                }
-            }
-        }
-
-        const h = new Array(9).fill(0);
-        for (let i = 7; i >= 0; i--) {
-            h[i] = M[i][8];
-            for (let j = i + 1; j < 8; j++) {
-                h[i] -= M[i][j] * h[j];
-            }
-            if (Math.abs(M[i][i]) > 1e-9) {
-                h[i] /= M[i][i];
-            } else {
-                h[i] = 0;
-            }
-        }
-        h[8] = 1;
-        return h;
-    };
-
-    const handleApprovePdf = async () => {
-        if (corners.length !== 4 || !capturedImage || !imageRef.current) {
-            setError("Görüntü kaydetmek için lütfen 4 köşe seçin.");
-            return;
-        }
-        if (!imageDimensions.width || !imageDimensions.height || !imageDimensions.displayWidth || !imageDimensions.displayHeight) {
-            setError("Görüntü boyutları tam olarak yüklenemedi. Lütfen köşeleri sıfırlayıp tekrar deneyin veya yeni bir görüntü yakalayın.");
-            setIsProcessing(false);
-            return;
-        }
-
-        setIsProcessing(true);
-        clearError();
-
-        try {
-            const { width: imgWidth, height: imgHeight, displayWidth, displayHeight } = imageDimensions;
-
-            if (!imgWidth || !imgHeight) {
-                setError("Görüntü boyutları alınamadı. Lütfen tekrar deneyin.");
-                setIsProcessing(false);
-                return;
-            }
-
-            const scaleX = imgWidth / displayWidth;
-            const scaleY = imgHeight / displayHeight;
-
-            const sourcePoints = corners.map(c => ({ x: c.x * scaleX, y: c.y * scaleY }));
-
-            // Set target dimensions to A4 paper aspect ratio (1:1.414)
-            // Use the original image width as base and calculate height accordingly
-            const targetWidth = imgWidth;
-            const targetHeight = Math.round(imgWidth * 1.414); // A4 aspect ratio: height = width * 1.414
-
-            const destPoints = [
-                { x: 0, y: 0 },
-                { x: targetWidth, y: 0 },
-                { x: targetWidth, y: targetHeight },
-                { x: 0, y: targetHeight },
-            ];
-
-            const transformMatrix = getPerspectiveTransform(sourcePoints, destPoints);
-
-            if (!transformMatrix || transformMatrix.some(val => isNaN(val) || !isFinite(val))) {
-                setError("Perspektif dönüşüm matrisi hesaplanamadı. Köşelerin geçerli bir dışbükey dörtgen oluşturduğundan emin olun (çizgiler kesişmemeli ve noktalar sıralı olmalı).");
-                setIsProcessing(false);
-                return;
-            }
-
-            let det = transformMatrix[0] * (transformMatrix[4] * transformMatrix[8] - transformMatrix[5] * transformMatrix[7]) -
-                transformMatrix[1] * (transformMatrix[3] * transformMatrix[8] - transformMatrix[5] * transformMatrix[6]) +
-                transformMatrix[2] * (transformMatrix[3] * transformMatrix[7] - transformMatrix[4] * transformMatrix[6]);
-
-            if (Math.abs(det) < 1e-9) {
-                setError("Dönüşüm matrisi geçersiz (determinant sıfıra yakın). Köşeler düzgün bir dörtgen oluşturmuyor olabilir.");
-                setIsProcessing(false);
-                return;
-            }
-
-            const invTransformMatrix = adj(transformMatrix).map(val => val / det);
-            if (invTransformMatrix.some(val => isNaN(val) || !isFinite(val))) {
-                setError("Ters dönüşüm matrisi hesaplanırken hata oluştu.");
-                setIsProcessing(false);
-                return;
-            }
-
-            const outputCanvas = document.createElement('canvas');
-            outputCanvas.width = targetWidth;
-            outputCanvas.height = targetHeight;
-            const ctx = outputCanvas.getContext('2d', { willReadFrequently: true });
-
-            const originalImageElement = new Image();
-            originalImageElement.src = capturedImage;
-            await new Promise((resolve, reject) => {
-                originalImageElement.onload = resolve;
-                originalImageElement.onerror = () => reject(new Error("Orijinal görüntü işlenmek üzere yüklenemedi"));
-            });
-
-            const sourceCanvas = document.createElement('canvas');
-            sourceCanvas.width = imgWidth;
-            sourceCanvas.height = imgHeight;
-            const sourceCtx = sourceCanvas.getContext('2d', { willReadFrequently: true });
-            sourceCtx.drawImage(originalImageElement, 0, 0);
-            const sourceImageData = sourceCtx.getImageData(0, 0, imgWidth, imgHeight);
-            const sourceData = sourceImageData.data;
-
-            const outputImageData = ctx.createImageData(targetWidth, targetHeight);
-            const outputData = outputImageData.data;
-
-            for (let y = 0; y < targetHeight; y++) {
-                for (let x = 0; x < targetWidth; x++) {
-                    const H = invTransformMatrix;
-                    const srcXW = H[0] * x + H[1] * y + H[2];
-                    const srcYW = H[3] * x + H[4] * y + H[5];
-                    const srcW = H[6] * x + H[7] * y + H[8];
-
-                    const srcX = srcXW / srcW;
-                    const srcY = srcYW / srcW;
-
-                    const outputIndex = (y * targetWidth + x) * 4;
-
-                    if (srcX >= 0 && srcX < imgWidth - 1 && srcY >= 0 && srcY < imgHeight - 1) {
-                        const x0 = Math.floor(srcX);
-                        const y0 = Math.floor(srcY);
-                        const x1 = x0 + 1;
-                        const y1 = y0 + 1;
-
-                        const dx = srcX - x0;
-                        const dy = srcY - y0;
-
-                        for (let c = 0; c < 3; c++) {
-                            const c00 = sourceData[(y0 * imgWidth + x0) * 4 + c];
-                            const c10 = sourceData[(y0 * imgWidth + x1) * 4 + c];
-                            const c01 = sourceData[(y1 * imgWidth + x0) * 4 + c];
-                            const c11 = sourceData[(y1 * imgWidth + x1) * 4 + c];
-
-                            const val =
-                                (c00 * (1 - dx) + c10 * dx) * (1 - dy) +
-                                (c01 * (1 - dx) + c11 * dx) * dy;
-                            outputData[outputIndex + c] = val;
+    const renderCaptureModeContent = () => (
+        <div style={styles.captureContainer}>
+            <h2 style={styles.title}>Adım 1: Görüntü Yakala</h2>
+            <p style={styles.instructions}>Belgenizi kameraya net bir şekilde gösterin ve yakalayın.</p>
+            <div style={{
+                ...styles.webcamWrapper,
+                aspectRatio: actualCameraDimensions.width && actualCameraDimensions.height ?
+                    `${actualCameraDimensions.width} / ${actualCameraDimensions.height}` :
+                    styles.webcamWrapper.aspectRatio
+            }}>
+                <Webcam
+                    audio={false}
+                    ref={webcamRef}
+                    screenshotFormat="image/png"
+                    videoConstraints={videoConstraints}
+                    onUserMediaError={(err) => setError(`Kamera hatası: ${err.name}. Tarayıcı ayarlarını kontrol edin.`)}
+                    onUserMedia={() => {
+                        if (webcamRef.current && webcamRef.current.video && webcamRef.current.video.videoWidth && webcamRef.current.video.videoHeight) {
+                            const video = webcamRef.current.video;
+                            setActualCameraDimensions({ width: video.videoWidth, height: video.videoHeight });
                         }
-                        outputData[outputIndex + 3] = 255;
-                    } else {
-                        outputData[outputIndex] = 255;
-                        outputData[outputIndex + 1] = 255;
-                        outputData[outputIndex + 2] = 255;
-                        outputData[outputIndex + 3] = 255;
-                    }
-                }
-            }
-            ctx.putImageData(outputImageData, 0, 0);
+                    }}
+                    style={styles.webcam}
+                    mirrored={false}
+                />
+            </div>
+            <button onClick={handleCapture} disabled={isProcessing} style={{ ...styles.button, ...styles.buttonPrimary }}>
+                {isProcessing ? "İşleniyor..." : "Görüntü Yakala"}
+            </button>
+        </div>
+    );
 
-            const finalImageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
-            const data = finalImageData.data;
-            const contrastValue = 1.15;
-            const brightnessValue = 0;
-
-            for (let i = 0; i < data.length; i += 4) {
-                data[i] = contrastValue * (data[i] - 128) + 128;
-                data[i + 1] = contrastValue * (data[i + 1] - 128) + 128;
-                data[i + 2] = contrastValue * (data[i + 2] - 128) + 128;
-
-                data[i] += brightnessValue;
-                data[i + 1] += brightnessValue;
-                data[i + 2] += brightnessValue;
-
-                data[i] = Math.max(0, Math.min(255, data[i]));
-                data[i + 1] = Math.max(0, Math.min(255, data[i + 1]));
-                data[i + 2] = Math.max(0, Math.min(255, data[i + 2]));
-            }
-            ctx.putImageData(finalImageData, 0, 0);
-
-            // Generate JPEG instead of PDF
-            const jpegImageData = outputCanvas.toDataURL('image/jpeg', 0.9); // Using 0.9 for quality
-
-            const timestamp = Date.now();
-            const imageName = `goruntu-${timestamp}`;
-
-            setGeneratedImages(prev => [...prev, {
-                name: imageName,
-                data: jpegImageData,
-                timestamp: timestamp,
-                thumbnail: jpegImageData // Using the full image as thumbnail for simplicity
-            }]);
-
-            setMode('capture');
-            setCapturedImage(null);
-            setCorners([]);
-
-        } catch (err) {
-            console.error("Görüntü Kaydetme Hatası:", err);
-            setError(`Görüntü kaydedilemedi: ${err.message}`);
-        } finally {
-            setIsProcessing(false);
-        }
-    };
-
-    const handleDownloadImage = (imageData, imageName) => { // Renamed from handleDownloadPdf
-        const link = document.createElement('a');
-        link.href = imageData;
-        link.download = `${imageName}.jpeg`; // Changed extension to .jpeg
-        link.click();
-    };
-
-    const resetState = () => {
-        setMode('capture');
-        setCapturedImage(null);
-        setCorners([]);
-        setActiveCornerIndex(null);
-        clearError();
-        setIsProcessing(false);
-        setImageDimensions({ width: 0, height: 0, displayWidth: 0, displayHeight: 0 });
-        if (previewCanvasRef.current) {
-            const canvas = previewCanvasRef.current;
-            const ctx = canvas.getContext('2d');
-            if (canvas.width > 0 && canvas.height > 0) ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
-    };
-
-    const deleteImage = (timestamp) => { // Renamed from deletePdf
-        setGeneratedImages(prev => prev.filter(img => img.timestamp !== timestamp)); // Updated to setGeneratedImages
-    };
-
-    const renderCaptureMode = () => (
-        <div style={styles.pageContainer}>
-            <h1 style={styles.mainTitle}>Belge Tarayıcı</h1>
-            <div style={styles.captureContainer}>
-                <h2 style={styles.title}>Adım 1: Görüntü Yakala</h2>
-                <p style={styles.instructions}>Belgenizi kameraya net bir şekilde gösterin ve yakalayın.</p>
-                <div style={{
-                    ...styles.webcamWrapper,
-                    aspectRatio: actualCameraDimensions.width && actualCameraDimensions.height ?
-                        `${actualCameraDimensions.width} / ${actualCameraDimensions.height}` :
-                        styles.webcamWrapper.aspectRatio // Fallback to default
-                }}>
-                    <Webcam
-                        audio={false}
-                        ref={webcamRef}
-                        screenshotFormat="image/png"
-                        videoConstraints={videoConstraints}
-                        onUserMediaError={(err) => setError(`Kamera hatası: ${err.name}. Tarayıcı ayarlarını kontrol edin.`)}
-                        onUserMedia={() => {
-                            if (webcamRef.current && webcamRef.current.video && webcamRef.current.video.videoWidth && webcamRef.current.video.videoHeight) {
-                                const video = webcamRef.current.video;
-                                setActualCameraDimensions({ width: video.videoWidth, height: video.videoHeight });
+    const renderEditModeContent = () => (
+        <div style={styles.editContainer}>
+            <h2 style={styles.title}>Adım 2: Köşeleri Ayarla</h2>
+            <p style={styles.instructions}>Köşeye dokunarak seçin, sonra resim üzerinde istediğiniz yere dokunarak yerleştirin.</p>
+            <div
+                style={{
+                    ...styles.imagePreviewContainer,
+                    cursor: activeCornerIndex !== null ? 'crosshair' : 'default'
+                }}
+                id="imagePreviewContainer"
+                onClick={handleImageAreaClick}
+            >
+                {capturedImage && (
+                    <img
+                        ref={imageRef}
+                        src={capturedImage}
+                        alt="Yakalanan Görüntü"
+                        style={styles.previewImage}
+                        onLoad={() => {
+                            if (imageRef.current && capturedImage) {
+                                initializeCorners();
                             }
                         }}
-                        style={styles.webcam}
-                        mirrored={false}
                     />
-                </div>
-                <button onClick={handleCapture} disabled={isProcessing} style={{ ...styles.button, ...styles.buttonPrimary }}>
-                    {isProcessing ? "İşleniyor..." : "Görüntü Yakala"}
+                )}
+                <canvas ref={previewCanvasRef} style={styles.previewCanvas}></canvas>
+                {corners.map((corner, index) => (
+                    <div
+                        key={index}
+                        style={{
+                            ...styles.cornerPoint,
+                            left: `${corner.x}px`,
+                            top: `${corner.y}px`,
+                            backgroundColor: activeCornerIndex === index ? '#ff4500' : '#007bff',
+                        }}
+                        onClick={(e) => handleCornerClick(index, e)}
+                    >
+                        {index + 1}
+                    </div>
+                ))}
+            </div>
+            <div style={styles.buttonGroup}>
+                <button onClick={resetState} style={{ ...styles.button, ...styles.buttonSecondary }}>
+                    Tekrar Çek
+                </button>
+                <button onClick={initializeCorners} style={{ ...styles.button, ...styles.buttonSecondary }} disabled={!imageRef.current || !capturedImage}>
+                    Köşeleri Sıfırla
+                </button>
+                <button onClick={handleApprovePdf} disabled={isProcessing || corners.length !== 4} style={{ ...styles.button, ...styles.buttonPrimary }}>
+                    {isProcessing ? "İşleniyor..." : "Görüntüyü Kaydet"}
                 </button>
             </div>
         </div>
     );
 
-    const renderEditMode = () => (
-        <div style={styles.pageContainer}>
-            <h1 style={styles.mainTitle}>Belge Tarayıcı</h1>
-            <div
-                style={styles.editContainer}
-            >
-                <h2 style={styles.title}>Adım 2: Köşeleri Ayarla</h2>
-                <p style={styles.instructions}>Köşeye dokunarak seçin, sonra resim üzerinde istediğiniz yere dokunarak yerleştirin.</p>
-                <div
-                    style={{
-                        ...styles.imagePreviewContainer,
-                        cursor: activeCornerIndex !== null ? 'crosshair' : 'default'
-                    }}
-                    id="imagePreviewContainer"
-                    onClick={handleImageAreaClick}
-                >
-                    {capturedImage && (
-                        <img
-                            ref={imageRef}
-                            src={capturedImage}
-                            alt="Yakalanan Görüntü"
-                            style={styles.previewImage}
-                            onLoad={() => {
-                                if (imageRef.current && capturedImage) {
-                                    initializeCorners();
-                                }
-                            }}
-                        />
-                    )}
-                    <canvas ref={previewCanvasRef} style={styles.previewCanvas}></canvas>
-                    {corners.map((corner, index) => (
-                        <div
-                            key={index}
-                            style={{
-                                ...styles.cornerPoint,
-                                left: `${corner.x}px`,
-                                top: `${corner.y}px`,
-                                backgroundColor: activeCornerIndex === index ? '#ff4500' : '#007bff',
-                            }}
-                            onClick={(e) => handleCornerClick(index, e)}
-                        >
-                            {index + 1}
-                        </div>
-                    ))}
-                </div>
-                <div style={styles.buttonGroup}>
-                    <button onClick={resetState} style={{ ...styles.button, ...styles.buttonSecondary }}>
-                        Tekrar Çek
-                    </button>
-                    <button onClick={initializeCorners} style={{ ...styles.button, ...styles.buttonSecondary }} disabled={!imageRef.current || !capturedImage}>
-                        Köşeleri Sıfırla
-                    </button>
-                    <button onClick={handleApprovePdf} disabled={isProcessing || corners.length !== 4} style={{ ...styles.button, ...styles.buttonPrimary }}>
-                        {isProcessing ? "İşleniyor..." : "Görüntüyü Kaydet"}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-
     const renderImageList = () => {
-        if (generatedImages.length === 0) return null;
+        if (generatedImages.length === 0 && !(patientId || accessionNumber)) {
+            // If no images and no patient info to show input fields for, hide this section
+            // Or, always show if patientId/accessionNumber might be entered manually later.
+            // For now, let's keep input fields tied to having images OR having prefilled data.
+            // This logic might need adjustment based on exact UX desired for manual PId/AccNo entry.
+        }
+
+        // Always show input fields if there are images OR if patientId/AccNo are prefilled,
+        // or if initial URL check is complete (allowing manual entry)
+        const showInputFields = generatedImages.length > 0 || patientId || accessionNumber || initialUrlCheckComplete;
+
 
         return (
             <div style={styles.imageListContainer}>
                 <h2 style={styles.title}>Kaydedilmiş Görüntüler</h2>
-                <div style={styles.imageGrid}>
-                    {generatedImages.map((image) => (
-                        <div key={image.timestamp} style={styles.imageCard}>
-                            <div style={styles.thumbnailContainer}>
-                                <img src={image.thumbnail} alt="Görüntü Önizleme" style={styles.thumbnail} />
+                {generatedImages.length > 0 ? (
+                    <div style={styles.imageGrid}>
+                        {generatedImages.map((image) => (
+                            <div key={image.timestamp} style={styles.imageCard}>
+                                <div style={styles.thumbnailContainer}>
+                                    <img src={image.thumbnail} alt="Görüntü Önizleme" style={styles.thumbnail} />
+                                </div>
+                                <div style={styles.imageInfo}>
+                                    <span style={styles.imageName}>{image.name}</span>
+                                    <span style={styles.imageDate}>
+                                        {new Date(image.timestamp).toLocaleDateString()}
+                                    </span>
+                                </div>
+                                <div style={styles.imageActions}>
+                                    <button
+                                        onClick={() => handleDownloadImage(image.data, image.name)}
+                                        style={styles.actionButton}
+                                    >
+                                        İndir
+                                    </button>
+                                    <button
+                                        onClick={() => deleteImage(image.timestamp)}
+                                        style={{ ...styles.actionButton, ...styles.deleteButton }}
+                                    >
+                                        Sil
+                                    </button>
+                                </div>
                             </div>
-                            <div style={styles.imageInfo}>
-                                <span style={styles.imageName}>{image.name}</span>
-                                <span style={styles.imageDate}>
-                                    {new Date(image.timestamp).toLocaleDateString()}
-                                </span>
-                            </div>
-                            <div style={styles.imageActions}>
-                                <button
-                                    onClick={() => handleDownloadImage(image.data, image.name)}
-                                    style={styles.actionButton}
-                                >
-                                    İndir
-                                </button>
-                                <button
-                                    onClick={() => deleteImage(image.timestamp)}
-                                    style={{ ...styles.actionButton, ...styles.deleteButton }}
-                                >
-                                    Sil
-                                </button>
-                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <p>Henüz kaydedilmiş görüntü yok.</p>
+                )}
+
+                {/* Input fields and Send button section */}
+                {showInputFields && (
+                    <>
+                        <div style={styles.inputGroup}>
+                            <input
+                                type="text"
+                                placeholder="Hasta ID"
+                                value={patientId}
+                                onChange={(e) => setPatientId(e.target.value)}
+                                style={styles.textInput}
+                                disabled={isProcessing}
+                            />
+                            <input
+                                type="text"
+                                placeholder="Erişim Numarası"
+                                value={accessionNumber}
+                                onChange={(e) => setAccessionNumber(e.target.value)}
+                                style={styles.textInput}
+                                disabled={isProcessing}
+                            />
                         </div>
-                    ))}
-                </div>
-                {generatedImages.length > 0 && (
-                    <button
-                        onClick={handleSendDocuments}
-                        style={{ ...styles.button, ...styles.buttonPrimary, ...styles.sendButton }}
-                    >
-                        Görüntüleri Gönder
-                    </button>
+                        <button
+                            onClick={handleSendDocuments}
+                            style={{ ...styles.button, ...styles.buttonPrimary, ...styles.sendButton }}
+                            disabled={isProcessing || generatedImages.length === 0 || !patientId.trim() || !accessionNumber.trim()}
+                        >
+                            {isProcessing ? "Gönderiliyor..." : "Görüntüleri Gönder"}
+                        </button>
+
+                        {/* Send Result Display */}
+                        {sendResult && (
+                            <div style={{
+                                ...styles.resultContainer,
+                                ...(sendResult.type === 'success' ? styles.resultSuccess :
+                                    sendResult.type === 'error' ? styles.resultError : styles.resultWarning)
+                            }}>
+                                <div style={styles.resultHeader}>
+                                    <span style={styles.resultIcon}>
+                                        {sendResult.type === 'success' ? '✅' :
+                                            sendResult.type === 'error' ? '❌' : '⚠️'}
+                                    </span>
+                                    <span style={styles.resultMessage}>{sendResult.message}</span>
+                                </div>
+                                {sendResult.details && (
+                                    <div style={styles.resultDetails}>
+                                        {sendResult.details}
+                                    </div>
+                                )}
+                                <div style={styles.resultTimestamp}>
+                                    {sendResult.timestamp}
+                                </div>
+                                <button
+                                    onClick={() => setSendResult(null)}
+                                    style={styles.closeResultButton}
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
         );
     };
 
-    const handleSendDocuments = () => {
-        console.log("Gönderilecek görüntüler:");
-        generatedImages.forEach(image => {
-            console.log(image.name);
-        });
-    };
 
     return (
         <div style={styles.appContainer}>
@@ -586,7 +249,47 @@ const Scanner = () => {
                     <button onClick={clearError} style={styles.closeButton}>&times;</button>
                 </div>
             )}
-            {mode === 'capture' ? renderCaptureMode() : renderEditMode()}
+
+            <div style={styles.pageContainer}>
+                <h1 style={styles.mainTitle}>Belge Tarayıcı</h1>
+
+                {(patientId || accessionNumber) && (
+                    <div style={styles.patientInfoDisplay}>
+                        <h3 style={styles.infoSectionTitle}>Aktif Hasta Bilgileri</h3>
+                        {patientId && <p style={styles.infoText}><strong>Hasta ID:</strong> {patientId}</p>}
+                        {accessionNumber && <p style={styles.infoText}><strong>Erişim Numarası:</strong> {accessionNumber}</p>}
+                    </div>
+                )}
+
+                {initialUrlCheckComplete && !patientId && !accessionNumber && !error && (
+                    <div style={styles.noPatientInfoMessageContainer}>
+                        <p style={styles.infoTextLarge}>
+                            Hasta bilgileri bulunamadı. Aşağıdan hasta bilgilerini manuel olarak girebilirsiniz.
+                        </p>
+                        <div style={styles.inputGroup}>
+                            <input
+                                type="text"
+                                placeholder="Hasta ID"
+                                value={patientId}
+                                onChange={(e) => setPatientId(e.target.value)}
+                                style={styles.textInput}
+                                disabled={isProcessing}
+                            />
+                            <input
+                                type="text"
+                                placeholder="Erişim Numarası"
+                                value={accessionNumber}
+                                onChange={(e) => setAccessionNumber(e.target.value)}
+                                style={styles.textInput}
+                                disabled={isProcessing}
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {mode === 'capture' ? renderCaptureModeContent() : renderEditModeContent()}
+            </div>
+
             {renderImageList()}
         </div>
     );
@@ -597,8 +300,7 @@ const styles = {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: '"Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+        // justifyContent: 'center', // Removed to allow natural top alignment
         padding: '10px',
         backgroundColor: '#eef1f5',
         minHeight: '100vh',
@@ -606,11 +308,13 @@ const styles = {
     },
     pageContainer: {
         width: '100%',
-        maxWidth: '900px',
+        maxWidth: '900px', // Max width for the main content area
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        padding: '0 10px',
+        padding: '0 10px', // Horizontal padding for page content
+        boxSizing: 'border-box',
+        marginBottom: '20px', // Space before image list
     },
     mainTitle: {
         color: '#2c3e50',
@@ -618,7 +322,47 @@ const styles = {
         fontSize: '2em',
         textAlign: 'center',
     },
-    title: {
+    patientInfoDisplay: {
+        width: '100%',
+        maxWidth: '450px', // Align with webcam/image preview width
+        backgroundColor: '#fff',
+        padding: '15px',
+        borderRadius: '8px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+        marginBottom: '20px',
+        border: '1px solid #e0e0e0',
+    },
+    infoSectionTitle: {
+        color: '#34495e',
+        fontSize: '1.2em',
+        marginBottom: '10px',
+        borderBottom: '1px solid #eee',
+        paddingBottom: '5px',
+    },
+    infoText: {
+        color: '#555',
+        fontSize: '1em',
+        margin: '5px 0',
+    },
+    noPatientInfoMessageContainer: {
+        width: '100%',
+        maxWidth: '450px', // Consistent with patientInfoDisplay
+        backgroundColor: '#fff3cd', // A light yellow, often used for warnings/info
+        color: '#664d03', // Darker text for readability on yellow
+        padding: '15px',
+        borderRadius: '8px',
+        border: '1px solid #ffeeba', // Border to complement background
+        boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+        marginBottom: '20px',
+        textAlign: 'center',
+    },
+    infoTextLarge: { // For the specific "no patient selected" message
+        color: '#664d03', // Match container text color
+        fontSize: '1em',
+        margin: '0', // Remove default paragraph margin if any
+        lineHeight: '1.5',
+    },
+    title: { // General title for sections like "Adım 1", "Kaydedilmiş Görüntüler"
         color: '#34495e',
         marginBottom: '10px',
         fontSize: '1.5em',
@@ -641,14 +385,15 @@ const styles = {
         backgroundColor: 'white',
         borderRadius: '12px',
         boxShadow: '0 4px 15px rgba(0,0,0,0.07)',
-        width: '100%',
+        width: '100%', // Take full width of pageContainer's content area
+        maxWidth: '500px', // Max width for capture area
     },
     webcamWrapper: {
         border: '2px solid #bdc3c7',
         borderRadius: '8px',
         overflow: 'hidden',
         width: '100%',
-        maxWidth: '450px',
+        maxWidth: '450px', // Max width for webcam itself
         aspectRatio: '9 / 16',
         backgroundColor: '#2c3e50',
         position: 'relative',
@@ -667,12 +412,13 @@ const styles = {
         backgroundColor: 'white',
         borderRadius: '12px',
         boxShadow: '0 4px 15px rgba(0,0,0,0.07)',
-        width: '100%',
+        width: '100%', // Take full width of pageContainer's content area
+        maxWidth: '500px', // Max width for edit area
     },
     imagePreviewContainer: {
         position: 'relative',
         width: '100%',
-        maxWidth: '450px',
+        maxWidth: '450px', // Max width for image preview itself
         height: 'auto',
         overflow: 'hidden',
         border: '2px dashed #bdc3c7',
@@ -752,7 +498,7 @@ const styles = {
         borderRadius: '8px',
         marginBottom: '15px',
         width: '100%',
-        maxWidth: '860px',
+        maxWidth: '860px', // Consistent with pageContainer max-width for alignment
         textAlign: 'left',
         display: 'flex',
         justifyContent: 'space-between',
@@ -760,6 +506,7 @@ const styles = {
         boxShadow: '0 2px 8px rgba(217, 54, 69, 0.2)',
         border: '1px solid #f5c6cb',
         fontSize: '0.9em',
+        boxSizing: 'border-box', // Ensure padding/border are within width
     },
     closeButton: {
         background: 'none',
@@ -773,19 +520,20 @@ const styles = {
     },
     imageListContainer: {
         width: '100%',
-        maxWidth: '900px',
+        maxWidth: '900px', // Consistent max width
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        padding: '20px 10px',
+        padding: '20px', // Added more padding around image list
         backgroundColor: 'white',
         borderRadius: '12px',
         boxShadow: '0 4px 15px rgba(0,0,0,0.07)',
         marginTop: '20px',
+        boxSizing: 'border-box',
     },
     imageGrid: {
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', // Adjusted minmax for potentially smaller cards
         gap: '15px',
         width: '100%',
         padding: '10px 0',
@@ -800,21 +548,24 @@ const styles = {
         flexDirection: 'column',
     },
     thumbnailContainer: {
-        height: '150px',
+        height: '150px', // Fixed height for thumbnail consistency
         overflow: 'hidden',
         backgroundColor: '#f5f5f5',
-        objectFit: 'contain',
+        display: 'flex', // Added for centering thumbnail
+        alignItems: 'center', // Added for centering thumbnail
+        justifyContent: 'center', // Added for centering thumbnail
     },
     thumbnail: {
         width: '100%',
         height: '100%',
-        objectFit: 'contain',
+        objectFit: 'contain', // Ensure whole image is visible
     },
     imageInfo: {
         padding: '10px',
         borderBottom: '1px solid #eee',
         display: 'flex',
         flexDirection: 'column',
+        minHeight: '60px', // Ensure some space for text
     },
     imageName: {
         fontWeight: '500',
@@ -830,12 +581,12 @@ const styles = {
     },
     imageActions: {
         display: 'flex',
-        padding: '10px',
+        padding: '8px 10px', // Slightly reduced padding
         justifyContent: 'space-between',
     },
     actionButton: {
-        padding: '8px',
-        fontSize: '0.9em',
+        padding: '6px 10px', // Slightly reduced padding
+        fontSize: '0.85em', // Slightly smaller font
         backgroundColor: '#007bff',
         color: 'white',
         border: 'none',
@@ -843,16 +594,104 @@ const styles = {
         cursor: 'pointer',
         flexGrow: 1,
         marginRight: '5px',
+        textAlign: 'center',
     },
     deleteButton: {
         backgroundColor: '#dc3545',
         marginRight: '0',
     },
-    sendButton: {
+    sendButton: { // For the main "Send Images" button
         backgroundColor: '#28a745',
         marginTop: '20px',
-        width: '200px',
+        width: 'auto',
+        minWidth: '200px',
         fontSize: '1em',
+        alignSelf: 'center',
+    },
+    inputGroup: { // Container for Patient ID and Accession Number inputs
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px',
+        marginBottom: '15px',
+        width: '100%',
+        maxWidth: '400px', // Control width of input group
+        alignItems: 'stretch',
+    },
+    textInput: {
+        padding: '12px 15px',
+        fontSize: '1em',
+        borderRadius: '6px',
+        border: '1px solid #ced4da',
+        boxSizing: 'border-box',
+        width: '100%',
+    },
+    resultContainer: {
+        position: 'relative',
+        padding: '15px',
+        borderRadius: '6px',
+        border: '1px solid',
+        marginTop: '15px',
+    },
+    resultSuccess: {
+        backgroundColor: '#d4edda',
+        borderColor: '#c3e6cb',
+        color: '#155724',
+    },
+    resultError: {
+        backgroundColor: '#f8d7da',
+        borderColor: '#f5c6cb',
+        color: '#721c24',
+    },
+    resultWarning: {
+        backgroundColor: '#fff3cd',
+        borderColor: '#ffeaa7',
+        color: '#856404',
+    },
+    resultHeader: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        marginBottom: '8px',
+    },
+    resultIcon: {
+        fontSize: '1.2rem',
+    },
+    resultMessage: {
+        fontWeight: '500',
+        fontSize: '1rem',
+    },
+    resultDetails: {
+        fontSize: '0.9rem',
+        marginTop: '8px',
+        padding: '8px',
+        backgroundColor: 'rgba(0,0,0,0.05)',
+        borderRadius: '4px',
+        whiteSpace: 'pre-line',
+        fontFamily: 'monospace',
+    },
+    resultTimestamp: {
+        fontSize: '0.8rem',
+        marginTop: '8px',
+        opacity: '0.7',
+        textAlign: 'right',
+    },
+    closeResultButton: {
+        position: 'absolute',
+        top: '8px',
+        right: '8px',
+        background: 'none',
+        border: 'none',
+        fontSize: '1.5rem',
+        cursor: 'pointer',
+        color: 'inherit',
+        opacity: '0.7',
+        width: '24px',
+        height: '24px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: '50%',
+        transition: 'opacity 0.2s',
     },
 };
 
