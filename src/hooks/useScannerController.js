@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 
 const useScannerController = () => {
@@ -507,18 +508,22 @@ const useScannerController = () => {
         setSendResult(null);
 
         if (generatedImages.length === 0) {
-            setSendResult({
-                type: 'error',
-                message: 'Gönderilecek görüntü yok.',
-                timestamp: new Date().toLocaleString('tr-TR')
+            flushSync(() => {
+                setSendResult({
+                    type: 'error',
+                    message: 'Gönderilecek görüntü yok.',
+                    timestamp: new Date().toLocaleString('tr-TR')
+                });
             });
             return;
         }
         if (!patientId.trim() || !accessionNumber.trim()) {
-            setSendResult({
-                type: 'error',
-                message: 'Lütfen Hasta ID ve Erişim Numarası girin.',
-                timestamp: new Date().toLocaleString('tr-TR')
+            flushSync(() => {
+                setSendResult({
+                    type: 'error',
+                    message: 'Lütfen Hasta ID ve Erişim Numarası girin.',
+                    timestamp: new Date().toLocaleString('tr-TR')
+                });
             });
             return;
         }
@@ -538,7 +543,7 @@ const useScannerController = () => {
 
 
 
-                const wsUrl = 'wss://192.168.1.104/InterPacs.WebDicomUpload/WS.ashx';
+                const wsUrl = `wss://${window.location.hostname}/InterPacs.WebDicomUpload/WS.ashx`;
                 console.log(`Uploading ${image.name}.jpeg via WebSocket to: ${wsUrl}`);
                 const ws = new WebSocket(wsUrl);
                 let timeoutId;
@@ -638,19 +643,23 @@ const useScannerController = () => {
 
             if (failedUploads > 0 && successfulUploads === 0) {
                 // All failed
-                setSendResult({
-                    type: 'error',
-                    message: `Hiçbir görüntü gönderilemedi! (${failedUploads}/${generatedImages.length} hata)`,
-                    details: failedFiles.map(f => `${f.fileName}: ${f.error}`).join('\n'),
-                    timestamp: new Date().toLocaleString('tr-TR')
+                flushSync(() => {
+                    setSendResult({
+                        type: 'error',
+                        message: `Hiçbir görüntü gönderilemedi! (${failedUploads}/${generatedImages.length} hata)`,
+                        details: failedFiles.map(f => `${f.fileName}: ${f.error}`).join('\n'),
+                        timestamp: new Date().toLocaleString('tr-TR')
+                    });
                 });
             } else if (failedUploads > 0) {
                 // Partial success
-                setSendResult({
-                    type: 'warning',
-                    message: `Kısmi başarı: ${successfulUploads} başarılı, ${failedUploads} hatalı (${generatedImages.length} toplam)`,
-                    details: failedFiles.length > 0 ? `Hatalı dosyalar:\n${failedFiles.map(f => `${f.fileName}: ${f.error}`).join('\n')}` : '',
-                    timestamp: new Date().toLocaleString('tr-TR')
+                flushSync(() => {
+                    setSendResult({
+                        type: 'warning',
+                        message: `Kısmi başarı: ${successfulUploads} başarılı, ${failedUploads} hatalı (${generatedImages.length} toplam)`,
+                        details: failedFiles.length > 0 ? `Hatalı dosyalar:\n${failedFiles.map(f => `${f.fileName}: ${f.error}`).join('\n')}` : '',
+                        timestamp: new Date().toLocaleString('tr-TR')
+                    });
                 });
             } else if (successfulUploads > 0) {
                 // All WebSocket uploads successful, now make the POST request
@@ -684,7 +693,8 @@ const useScannerController = () => {
                     console.log("Current patient details for DICOM send:", currentPatientDetails);
                     console.log("Sending DICOM metadata POST request with body:", dicomSendData);
 
-                    const response = await fetch('/InterPacs.WebDicomUpload/api/DicomSend', {
+                    const apiUrl = `https://${window.location.hostname}/InterPacs.WebDicomUpload/api/DicomSend`;
+                    const response = await fetch(apiUrl, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -697,46 +707,68 @@ const useScannerController = () => {
                         throw new Error(`DicomSend API Hata: ${response.status} - ${errorText}`);
                     }
 
-                    const responseData = await response.json(); // Assuming server responds with JSON
+                    const responseData = await response.json();
                     console.log("DicomSend API Yanıtı:", responseData);
 
-                    setSendResult({
-                        type: 'success',
-                        message: `Tüm ${successfulUploads} görüntü başarıyla gönderildi ve DICOM bilgisi kaydedildi!`,
-                        details: `${successfulUploads} dosya başarıyla yüklendi ve DICOM metadata kaydedildi.`,
-                        timestamp: new Date().toLocaleString('tr-TR')
-                    });
-                    setGeneratedImages([]);
-                    // Optionally clear patientId and accessionNumber if the workflow implies a fresh start
-                    // setPatientId('');
-                    // setAccessionNumber(''); 
-                    // setCurrentPatientDetails(null);
+                    // Check if the response contains ResultCode
+                    const isSuccess = responseData?.ResultCode === true;
+
+                    if (isSuccess) {
+                        flushSync(() => {
+                            setSendResult({
+                                type: 'success',
+                                message: `Tüm ${successfulUploads} görüntü başarıyla gönderildi ve DICOM bilgisi kaydedildi!`,
+                                details: ``,
+                                timestamp: new Date().toLocaleString('tr-TR')
+                            });
+                        });
+                        setGeneratedImages([]);
+                        // Optionally clear patientId and accessionNumber if the workflow implies a fresh start
+                        // setPatientId('');
+                        // setAccessionNumber(''); 
+                        // setCurrentPatientDetails(null);
+                    } else {
+                        flushSync(() => {
+                            setSendResult({
+                                type: 'error',
+                                message: `Görüntüler gönderildi ancak DICOM metadata kaydedilemedi: ${responseData?.Message || 'Bilinmeyen hata'}`,
+                                details: responseData?.Message || '',
+                                timestamp: new Date().toLocaleString('tr-TR')
+                            });
+                        });
+                    }
 
                 } catch (postError) {
                     console.error("DICOM metadata gönderme hatası:", postError);
-                    setSendResult({
-                        type: 'warning',
-                        message: `Görüntüler gönderildi (${successfulUploads}), ancak DICOM metadata gönderilemedi`,
-                        details: `Hata: ${postError.message}`,
-                        timestamp: new Date().toLocaleString('tr-TR')
+                    flushSync(() => {
+                        setSendResult({
+                            type: 'warning',
+                            message: `Görüntüler gönderildi (${successfulUploads}), ancak DICOM metadata gönderilemedi`,
+                            details: `Hata: ${postError.message}`,
+                            timestamp: new Date().toLocaleString('tr-TR')
+                        });
                     });
                 }
 
             } else {
-                setSendResult({
-                    type: 'error',
-                    message: 'Gönderilecek görüntü bulunamadı veya bir sorun oluştu.',
-                    timestamp: new Date().toLocaleString('tr-TR')
+                flushSync(() => {
+                    setSendResult({
+                        type: 'error',
+                        message: 'Gönderilecek görüntü bulunamadı veya bir sorun oluştu.',
+                        timestamp: new Date().toLocaleString('tr-TR')
+                    });
                 });
             }
 
         } catch (overallError) {
             console.error("Görüntü gönderme işlemlerini yönetirken beklenmedik hata:", overallError);
-            setSendResult({
-                type: 'error',
-                message: 'Görüntüleri gönderirken genel bir hata oluştu.',
-                details: overallError.message,
-                timestamp: new Date().toLocaleString('tr-TR')
+            flushSync(() => {
+                setSendResult({
+                    type: 'error',
+                    message: 'Görüntüleri gönderirken genel bir hata oluştu.',
+                    details: overallError.message,
+                    timestamp: new Date().toLocaleString('tr-TR')
+                });
             });
         } finally {
             setIsProcessing(false);

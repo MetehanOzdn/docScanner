@@ -126,18 +126,6 @@ const Scanner = () => {
     );
 
     const renderImageList = () => {
-        if (generatedImages.length === 0 && !(patientId || accessionNumber)) {
-            // If no images and no patient info to show input fields for, hide this section
-            // Or, always show if patientId/accessionNumber might be entered manually later.
-            // For now, let's keep input fields tied to having images OR having prefilled data.
-            // This logic might need adjustment based on exact UX desired for manual PId/AccNo entry.
-        }
-
-        // Always show input fields if there are images OR if patientId/AccNo are prefilled,
-        // or if initial URL check is complete (allowing manual entry)
-        const showInputFields = generatedImages.length > 0 || patientId || accessionNumber || initialUrlCheckComplete;
-
-
         return (
             <div style={styles.imageListContainer}>
                 <h2 style={styles.title}>Kaydedilmiş Görüntüler</h2>
@@ -175,66 +163,60 @@ const Scanner = () => {
                     <p>Henüz kaydedilmiş görüntü yok.</p>
                 )}
 
-                {/* Input fields and Send button section */}
-                {showInputFields && (
-                    <>
-                        <div style={styles.inputGroup}>
-                            <input
-                                type="text"
-                                placeholder="Hasta ID"
-                                value={patientId}
-                                onChange={(e) => setPatientId(e.target.value)}
-                                style={styles.textInput}
-                                disabled={isProcessing}
-                            />
-                            <input
-                                type="text"
-                                placeholder="Erişim Numarası"
-                                value={accessionNumber}
-                                onChange={(e) => setAccessionNumber(e.target.value)}
-                                style={styles.textInput}
-                                disabled={isProcessing}
-                            />
-                        </div>
-                        <button
-                            onClick={handleSendDocuments}
-                            style={{ ...styles.button, ...styles.buttonPrimary, ...styles.sendButton }}
-                            disabled={isProcessing || generatedImages.length === 0 || !patientId.trim() || !accessionNumber.trim()}
-                        >
-                            {isProcessing ? "Gönderiliyor..." : "Görüntüleri Gönder"}
-                        </button>
+                {/* Send button section - only show if patient info is available */}
+                {(patientId && accessionNumber) && generatedImages.length > 0 && (
+                    <button
+                        onClick={handleSendDocuments}
+                        style={{ ...styles.button, ...styles.buttonPrimary, ...styles.sendButton }}
+                        disabled={isProcessing}
+                    >
+                        {isProcessing ? "Gönderiliyor..." : "Görüntüleri Gönder"}
+                    </button>
+                )}
 
-                        {/* Send Result Display */}
-                        {sendResult && (
-                            <div style={{
-                                ...styles.resultContainer,
-                                ...(sendResult.type === 'success' ? styles.resultSuccess :
-                                    sendResult.type === 'error' ? styles.resultError : styles.resultWarning)
-                            }}>
-                                <div style={styles.resultHeader}>
-                                    <span style={styles.resultIcon}>
-                                        {sendResult.type === 'success' ? '✅' :
-                                            sendResult.type === 'error' ? '❌' : '⚠️'}
-                                    </span>
-                                    <span style={styles.resultMessage}>{sendResult.message}</span>
-                                </div>
-                                {sendResult.details && (
-                                    <div style={styles.resultDetails}>
-                                        {sendResult.details}
-                                    </div>
-                                )}
-                                <div style={styles.resultTimestamp}>
-                                    {sendResult.timestamp}
-                                </div>
-                                <button
-                                    onClick={() => setSendResult(null)}
-                                    style={styles.closeResultButton}
-                                >
-                                    ×
-                                </button>
+                {/* Send Result Display - Show independently of button */}
+                {sendResult && (
+                    <div style={{
+                        ...styles.resultContainer,
+                        ...(sendResult.type === 'success' ? styles.resultSuccess :
+                            sendResult.type === 'error' ? styles.resultError : styles.resultWarning)
+                    }}>
+                        <div style={styles.resultHeader}>
+                            <span style={styles.resultIcon}>
+                                {sendResult.type === 'success' ? '✅' :
+                                    sendResult.type === 'error' ? '❌' : '⚠️'}
+                            </span>
+                            <span style={styles.resultMessage}>{sendResult.message}</span>
+                        </div>
+                        {sendResult.details && (
+                            <div style={styles.resultDetails}>
+                                {sendResult.details}
                             </div>
                         )}
-                    </>
+                        <div style={styles.resultTimestamp}>
+                            {sendResult.timestamp}
+                        </div>
+                        <button
+                            onClick={() => setSendResult(null)}
+                            style={styles.closeResultButton}
+                        >
+                            ×
+                        </button>
+                    </div>
+                )}
+
+                {/* Warning when no patient info and images exist */}
+                {(!patientId || !accessionNumber) && generatedImages.length > 0 && (
+                    <div style={styles.warningContainer}>
+                        <div style={styles.warningHeader}>
+                            <span style={styles.warningIcon}>⚠️</span>
+                            <span style={styles.warningMessage}>Hasta Bilgileri Eksik</span>
+                        </div>
+                        <p style={styles.warningText}>
+                            Görüntüleri gönderebilmek için hasta bilgileri gereklidir.
+                            Lütfen hasta listesinden bir hasta seçerek tarama işlemini başlatın.
+                        </p>
+                    </div>
                 )}
             </div>
         );
@@ -262,28 +244,18 @@ const Scanner = () => {
                 )}
 
                 {initialUrlCheckComplete && !patientId && !accessionNumber && !error && (
-                    <div style={styles.noPatientInfoMessageContainer}>
-                        <p style={styles.infoTextLarge}>
-                            Hasta bilgileri bulunamadı. Aşağıdan hasta bilgilerini manuel olarak girebilirsiniz.
-                        </p>
-                        <div style={styles.inputGroup}>
-                            <input
-                                type="text"
-                                placeholder="Hasta ID"
-                                value={patientId}
-                                onChange={(e) => setPatientId(e.target.value)}
-                                style={styles.textInput}
-                                disabled={isProcessing}
-                            />
-                            <input
-                                type="text"
-                                placeholder="Erişim Numarası"
-                                value={accessionNumber}
-                                onChange={(e) => setAccessionNumber(e.target.value)}
-                                style={styles.textInput}
-                                disabled={isProcessing}
-                            />
+                    <div style={styles.noPatientWarningContainer}>
+                        <div style={styles.warningHeader}>
+                            <span style={styles.warningIcon}>⚠️</span>
+                            <span style={styles.warningMessage}>Hasta Bilgileri Bulunamadı</span>
                         </div>
+                        <p style={styles.warningText}>
+                            Tarama işlemi için hasta bilgileri gereklidir.
+                            Lütfen ana sayfadan bir cihaz seçin ve hasta listesinden uygun hastayı seçerek tarama işlemini başlatın.
+                        </p>
+                        <p style={styles.warningSubText}>
+                            Hasta bilgileri olmadan görüntü gönderimi yapılamaz.
+                        </p>
                     </div>
                 )}
 
@@ -344,23 +316,17 @@ const styles = {
         fontSize: '1em',
         margin: '5px 0',
     },
-    noPatientInfoMessageContainer: {
+    noPatientWarningContainer: {
         width: '100%',
-        maxWidth: '450px', // Consistent with patientInfoDisplay
-        backgroundColor: '#fff3cd', // A light yellow, often used for warnings/info
-        color: '#664d03', // Darker text for readability on yellow
-        padding: '15px',
+        maxWidth: '450px',
+        backgroundColor: '#f8d7da',
+        color: '#721c24',
+        padding: '20px',
         borderRadius: '8px',
-        border: '1px solid #ffeeba', // Border to complement background
+        border: '1px solid #f5c6cb',
         boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
         marginBottom: '20px',
         textAlign: 'center',
-    },
-    infoTextLarge: { // For the specific "no patient selected" message
-        color: '#664d03', // Match container text color
-        fontSize: '1em',
-        margin: '0', // Remove default paragraph margin if any
-        lineHeight: '1.5',
     },
     title: { // General title for sections like "Adım 1", "Kaydedilmiş Görüntüler"
         color: '#34495e',
@@ -608,23 +574,6 @@ const styles = {
         fontSize: '1em',
         alignSelf: 'center',
     },
-    inputGroup: { // Container for Patient ID and Accession Number inputs
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px',
-        marginBottom: '15px',
-        width: '100%',
-        maxWidth: '400px', // Control width of input group
-        alignItems: 'stretch',
-    },
-    textInput: {
-        padding: '12px 15px',
-        fontSize: '1em',
-        borderRadius: '6px',
-        border: '1px solid #ced4da',
-        boxSizing: 'border-box',
-        width: '100%',
-    },
     resultContainer: {
         position: 'relative',
         padding: '15px',
@@ -692,6 +641,43 @@ const styles = {
         justifyContent: 'center',
         borderRadius: '50%',
         transition: 'opacity 0.2s',
+    },
+    warningContainer: {
+        width: '100%',
+        maxWidth: '400px',
+        backgroundColor: '#fff3cd',
+        color: '#856404',
+        padding: '15px',
+        borderRadius: '6px',
+        border: '1px solid #ffeaa7',
+        marginTop: '20px',
+        textAlign: 'center',
+    },
+    warningHeader: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '8px',
+        marginBottom: '10px',
+    },
+    warningIcon: {
+        fontSize: '1.2rem',
+    },
+    warningMessage: {
+        fontWeight: '500',
+        fontSize: '1rem',
+    },
+    warningText: {
+        fontSize: '0.9rem',
+        lineHeight: '1.4',
+        margin: '0',
+    },
+    warningSubText: {
+        fontSize: '0.85rem',
+        lineHeight: '1.3',
+        margin: '8px 0 0 0',
+        fontStyle: 'italic',
+        opacity: '0.8',
     },
 };
 

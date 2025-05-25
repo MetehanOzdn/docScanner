@@ -96,9 +96,14 @@ const PatientList = () => {
                             <div style={styles.patientInfo}>
                                 <h2 style={styles.patientName}>{patient.name}</h2>
                                 {patient.birthDate && <p style={styles.patientBirthDate}>Doğum: {patient.birthDate}</p>}
-                                {patient.procedureDescription && (
+                                {patient.accessionNumber && (
                                     <p style={styles.patientDescription}>
-                                        {patient.procedureDescription}
+                                        Accession No: {patient.accessionNumber}
+                                    </p>
+                                )}
+                                {patient.patientId && (
+                                    <p style={styles.patientDescription}>
+                                        Patient ID: {patient.patientId}
                                     </p>
                                 )}
                             </div>
