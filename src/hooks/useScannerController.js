@@ -65,11 +65,13 @@ const useScannerController = () => {
     }, [location.search, location.state]); // Runs when location.search or location.state changes
 
     const videoConstraints = {
-        width: { ideal: 720 },
-        height: { ideal: 1280 },
-        aspectRatio: 9 / 16,
         facingMode: "environment",
-        screenshotQuality: 1.0,
+        // Remove all constraints to let camera use its optimal native settings
+        // frameRate: { ideal: 30, max: 60 },
+        // width: { min: 1280, ideal: 1920, max: 4096 },
+        // height: { min: 720, ideal: 1080, max: 2160 },
+        // aspectRatio: 9 / 16,  // Commented out to allow native camera ratio
+        // screenshotQuality: 1.0,  // This parameter is not supported by react-webcam
     };
 
     const clearError = () => setError(null);
@@ -80,13 +82,21 @@ const useScannerController = () => {
             return;
         }
 
+        // Use actual camera dimensions if available, otherwise let webcam decide
         const { width: streamWidth, height: streamHeight } = actualCameraDimensions;
         let imageSrc;
 
         if (streamWidth > 0 && streamHeight > 0) {
-            imageSrc = webcamRef.current.getScreenshot({ width: streamWidth, height: streamHeight });
+            // Use the camera's actual native resolution
+            imageSrc = webcamRef.current.getScreenshot({
+                width: streamWidth,
+                height: streamHeight
+            });
+            console.log(`Capturing at native resolution: ${streamWidth}x${streamHeight}`);
         } else {
+            // Fallback to default capture
             imageSrc = webcamRef.current.getScreenshot();
+            console.log('Capturing at default resolution');
         }
 
         if (!imageSrc) {
@@ -404,34 +414,50 @@ const useScannerController = () => {
 
             const finalImageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
             const data = finalImageData.data;
-            const contrastValue = 1.15;
-            const brightnessValue = 0;
+
+            // Reduce contrast adjustment for better quality (was 1.15, now 1.05)
+            const contrastValue = 1.05;
+            const brightnessValue = 5; // Slight brightness increase
 
             for (let i = 0; i < data.length; i += 4) {
+                // Apply contrast
                 data[i] = contrastValue * (data[i] - 128) + 128;
                 data[i + 1] = contrastValue * (data[i + 1] - 128) + 128;
                 data[i + 2] = contrastValue * (data[i + 2] - 128) + 128;
 
+                // Apply brightness
                 data[i] += brightnessValue;
                 data[i + 1] += brightnessValue;
                 data[i + 2] += brightnessValue;
 
+                // Clamp values
                 data[i] = Math.max(0, Math.min(255, data[i]));
                 data[i + 1] = Math.max(0, Math.min(255, data[i + 1]));
                 data[i + 2] = Math.max(0, Math.min(255, data[i + 2]));
             }
             ctx.putImageData(finalImageData, 0, 0);
 
-            const jpegImageData = outputCanvas.toDataURL('image/jpeg', 0.9);
+            // Try PNG first for maximum quality, fallback to JPEG if size is too large
+            let finalImageOutput;
+            const pngImageData = outputCanvas.toDataURL('image/png');
+
+            // If PNG is too large (>5MB), use high-quality JPEG
+            if (pngImageData.length > 5 * 1024 * 1024) {
+                finalImageOutput = outputCanvas.toDataURL('image/jpeg', 0.95);
+                console.log('Using JPEG format due to size constraints');
+            } else {
+                finalImageOutput = pngImageData;
+                console.log('Using PNG format for maximum quality');
+            }
 
             const timestamp = Date.now();
             const imageName = `${accessionNumber || 'NO_ACCESSION'}-${timestamp}`;
 
             const newImageObject = {
                 name: imageName,
-                data: jpegImageData,
+                data: finalImageOutput,
                 timestamp: timestamp,
-                thumbnail: jpegImageData
+                thumbnail: finalImageOutput
             };
 
             setGeneratedImages(prevImages => [...prevImages, newImageObject]);

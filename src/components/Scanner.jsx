@@ -42,22 +42,34 @@ const Scanner = () => {
         <div style={styles.captureContainer}>
             <h2 style={styles.title}>Adım 1: Görüntü Yakala</h2>
             <p style={styles.instructions}>Belgenizi kameraya net bir şekilde gösterin ve yakalayın.</p>
-            <div style={{
-                ...styles.webcamWrapper,
-                aspectRatio: actualCameraDimensions.width && actualCameraDimensions.height ?
-                    `${actualCameraDimensions.width} / ${actualCameraDimensions.height}` :
-                    styles.webcamWrapper.aspectRatio
-            }}>
+            <div style={styles.webcamWrapper}>
                 <Webcam
                     audio={false}
                     ref={webcamRef}
                     screenshotFormat="image/png"
+                    screenshotQuality={1.0}
                     videoConstraints={videoConstraints}
                     onUserMediaError={(err) => setError(`Kamera hatası: ${err.name}. Tarayıcı ayarlarını kontrol edin.`)}
                     onUserMedia={() => {
-                        if (webcamRef.current && webcamRef.current.video && webcamRef.current.video.videoWidth && webcamRef.current.video.videoHeight) {
+                        if (webcamRef.current && webcamRef.current.video) {
                             const video = webcamRef.current.video;
-                            setActualCameraDimensions({ width: video.videoWidth, height: video.videoHeight });
+                            // Wait for video metadata to load to get accurate dimensions
+                            const updateDimensions = () => {
+                                if (video.videoWidth && video.videoHeight) {
+                                    setActualCameraDimensions({
+                                        width: video.videoWidth,
+                                        height: video.videoHeight
+                                    });
+                                    console.log('Camera stream dimensions:', video.videoWidth, 'x', video.videoHeight);
+                                    console.log('Video element display size:', video.clientWidth, 'x', video.clientHeight);
+                                }
+                            };
+
+                            if (video.videoWidth && video.videoHeight) {
+                                updateDimensions();
+                            } else {
+                                video.addEventListener('loadedmetadata', updateDimensions, { once: true });
+                            }
                         }
                     }}
                     style={styles.webcam}
@@ -360,9 +372,11 @@ const styles = {
         overflow: 'hidden',
         width: '100%',
         maxWidth: '450px', // Max width for webcam itself
-        aspectRatio: '9 / 16',
+        // Remove fixed aspect ratio to allow native camera ratio
+        // aspectRatio: '9 / 16',
         backgroundColor: '#2c3e50',
         position: 'relative',
+        minHeight: '300px', // Add minimum height for better display
     },
     webcam: {
         width: '100%',

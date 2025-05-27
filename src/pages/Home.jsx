@@ -5,7 +5,7 @@ export default function Home() {
     return (
         <div style={styles.container}>
             <header style={styles.header}>
-                <h1 style={styles.title}>DocScanner</h1>
+                <h1 style={styles.title}>Dicom Upload</h1>
                 <p style={styles.subtitle}>Belgelerinizi kolayca tarayın ve kaydediniz</p>
             </header>
 
@@ -14,7 +14,7 @@ export default function Home() {
             </main>
 
             <footer style={styles.footer}>
-                <p>© 2024 DocScanner. Tüm hakları saklıdır.</p>
+                <p>© 2024 Dicom Upload. Tüm hakları saklıdır.</p>
             </footer>
         </div>
     );

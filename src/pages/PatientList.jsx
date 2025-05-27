@@ -113,7 +113,7 @@ const PatientList = () => {
             </div>
 
             <footer style={styles.footer}>
-                <p>© {new Date().getFullYear()} Hasta Yönetimi</p>
+                <p>© {new Date().getFullYear()} Dicom Upload</p>
             </footer>
         </div>
     );

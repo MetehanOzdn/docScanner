@@ -38,7 +38,7 @@ const DevicesList = () => {
                 ))}
             </div>
             <footer style={styles.footer}>
-                <p>© {new Date().getFullYear()} Cihaz Yönetimi</p>
+                <p>© {new Date().getFullYear()} Dicom Upload</p>
             </footer>
         </div>
     );

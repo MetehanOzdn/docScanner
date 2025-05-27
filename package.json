@@ -1,5 +1,5 @@
 {
-  "name": "docscanner",
+  "name": "dicom-upload",
   "private": true,
   "version": "0.0.0",
   "type": "module",

@@ -1,3 +1,28 @@
+# Dicom Upload
+
+A modern React application for uploading and managing DICOM medical images. Built with Vite for fast development and optimized performance.
+
+## Features
+
+- DICOM image upload and management
+- Patient list management
+- Device integration
+- Modern, responsive UI
+- Fast scanning and document processing
+
+## Getting Started
+
+```bash
+npm install
+npm run dev
+```
+
+## Build for Production
+
+```bash
+npm run build
+```
+
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
