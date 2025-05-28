@@ -35,7 +35,8 @@ const Scanner = () => {
         setActualCameraDimensions,
         initialUrlCheckComplete,
         sendResult,
-        setSendResult
+        setSendResult,
+        navigateToPatientSelection
     } = useScannerController();
 
     const renderCaptureModeContent = () => (
@@ -213,6 +214,14 @@ const Scanner = () => {
                             style={styles.closeResultButton}
                         >
                             ×
+                        </button>
+
+                        {/* Navigate to Patient Selection button - show for all result types */}
+                        <button
+                            onClick={navigateToPatientSelection}
+                            style={styles.navigateButton}
+                        >
+                            Hasta Seçimi Ekranına Dön
                         </button>
                     </div>
                 )}
@@ -655,6 +664,20 @@ const styles = {
         justifyContent: 'center',
         borderRadius: '50%',
         transition: 'opacity 0.2s',
+    },
+    navigateButton: {
+        backgroundColor: '#17a2b8',
+        color: 'white',
+        border: 'none',
+        borderRadius: '6px',
+        padding: '10px 20px',
+        fontSize: '1rem',
+        fontWeight: '500',
+        cursor: 'pointer',
+        marginTop: '12px',
+        transition: 'background-color 0.2s',
+        width: '100%',
+        boxSizing: 'border-box',
     },
     warningContainer: {
         width: '100%',

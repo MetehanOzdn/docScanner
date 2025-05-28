@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { flushSync } from 'react-dom';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const useScannerController = () => {
     const webcamRef = useRef(null);
@@ -24,6 +24,7 @@ const useScannerController = () => {
     const [sendResult, setSendResult] = useState(null); // New state for send results
 
     const location = useLocation();
+    const navigate = useNavigate();
 
     useEffect(() => {
         const params = new URLSearchParams(location.search);
@@ -66,15 +67,31 @@ const useScannerController = () => {
 
     const videoConstraints = {
         facingMode: "environment",
-        // Remove all constraints to let camera use its optimal native settings
-        // frameRate: { ideal: 30, max: 60 },
-        // width: { min: 1280, ideal: 1920, max: 4096 },
-        // height: { min: 720, ideal: 1080, max: 2160 },
-        // aspectRatio: 9 / 16,  // Commented out to allow native camera ratio
-        // screenshotQuality: 1.0,  // This parameter is not supported by react-webcam
+        // High-quality settings for mobile photography
+        width: { min: 1920, ideal: 3840, max: 4096 },
+        height: { min: 1080, ideal: 2160, max: 4096 },
+        frameRate: { ideal: 30, max: 60 },
+        // Let camera choose its native aspect ratio for best quality
+        aspectRatio: { ideal: 4 / 3 }, // 4:3 is common for high-res phone cameras
     };
 
     const clearError = () => setError(null);
+
+    // Callback to handle when webcam is ready and get actual camera dimensions
+    const handleUserMedia = useCallback((stream) => {
+        if (stream && stream.getVideoTracks().length > 0) {
+            const videoTrack = stream.getVideoTracks()[0];
+            const settings = videoTrack.getSettings();
+
+            if (settings.width && settings.height) {
+                setActualCameraDimensions({
+                    width: settings.width,
+                    height: settings.height
+                });
+                console.log(`Camera actual dimensions detected: ${settings.width}x${settings.height}`);
+            }
+        }
+    }, []);
 
     const handleCapture = useCallback(() => {
         if (!webcamRef.current) {
@@ -82,21 +99,26 @@ const useScannerController = () => {
             return;
         }
 
-        // Use actual camera dimensions if available, otherwise let webcam decide
+        // Always try to capture at maximum quality
         const { width: streamWidth, height: streamHeight } = actualCameraDimensions;
         let imageSrc;
 
         if (streamWidth > 0 && streamHeight > 0) {
-            // Use the camera's actual native resolution
+            // Use the camera's actual native resolution with maximum quality
             imageSrc = webcamRef.current.getScreenshot({
                 width: streamWidth,
-                height: streamHeight
+                height: streamHeight,
+                quality: 1.0 // Maximum quality
             });
-            console.log(`Capturing at native resolution: ${streamWidth}x${streamHeight}`);
+            console.log(`Capturing at native resolution: ${streamWidth}x${streamHeight} with max quality`);
         } else {
-            // Fallback to default capture
-            imageSrc = webcamRef.current.getScreenshot();
-            console.log('Capturing at default resolution');
+            // Fallback to high-quality capture with estimated dimensions
+            imageSrc = webcamRef.current.getScreenshot({
+                width: 3840, // 4K width
+                height: 2160, // 4K height
+                quality: 1.0 // Maximum quality
+            });
+            console.log('Capturing at 4K resolution with max quality');
         }
 
         if (!imageSrc) {
@@ -415,9 +437,9 @@ const useScannerController = () => {
             const finalImageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
             const data = finalImageData.data;
 
-            // Reduce contrast adjustment for better quality (was 1.15, now 1.05)
-            const contrastValue = 1.05;
-            const brightnessValue = 5; // Slight brightness increase
+            // Minimal image processing to preserve original quality
+            const contrastValue = 1.02; // Very subtle contrast increase
+            const brightnessValue = 2; // Minimal brightness adjustment
 
             for (let i = 0; i < data.length; i += 4) {
                 // Apply contrast
@@ -437,14 +459,14 @@ const useScannerController = () => {
             }
             ctx.putImageData(finalImageData, 0, 0);
 
-            // Try PNG first for maximum quality, fallback to JPEG if size is too large
+            // Try PNG first for maximum quality, fallback to highest-quality JPEG if size is too large
             let finalImageOutput;
             const pngImageData = outputCanvas.toDataURL('image/png');
 
-            // If PNG is too large (>5MB), use high-quality JPEG
-            if (pngImageData.length > 5 * 1024 * 1024) {
-                finalImageOutput = outputCanvas.toDataURL('image/jpeg', 0.95);
-                console.log('Using JPEG format due to size constraints');
+            // If PNG is too large (>8MB), use highest-quality JPEG
+            if (pngImageData.length > 8 * 1024 * 1024) {
+                finalImageOutput = outputCanvas.toDataURL('image/jpeg', 0.98); // Increased from 0.95 to 0.98
+                console.log('Using high-quality JPEG format due to size constraints');
             } else {
                 finalImageOutput = pngImageData;
                 console.log('Using PNG format for maximum quality');
@@ -522,6 +544,35 @@ const useScannerController = () => {
     const deleteImage = (timestamp) => {
         setGeneratedImages(prev => prev.filter(img => img.timestamp !== timestamp));
     };
+
+    const navigateToPatientSelection = useCallback(() => {
+        // Clear current patient info and navigate back to patient list
+        setPatientId('');
+        setAccessionNumber('');
+        setCurrentPatientDetails(null);
+        setGeneratedImages([]);
+        resetState();
+        setSendResult(null);
+
+        // Get preserved dates from localStorage or use current date as fallback
+        const getCurrentDate = () => {
+            const today = new Date();
+            return today.toISOString().split('T')[0]; // YYYY-MM-DD format
+        };
+
+        const savedStartDate = localStorage.getItem('patientListStartDate') || getCurrentDate();
+        const savedEndDate = localStorage.getItem('patientListEndDate') || getCurrentDate();
+
+        // Create URL with preserved date parameters
+        const searchParams = new URLSearchParams();
+        searchParams.set('startDate', savedStartDate);
+        searchParams.set('endDate', savedEndDate);
+
+        // Navigate back to patient list page with preserved dates
+        navigate(`/patients?${searchParams.toString()}`, {
+            state: location.state // Preserve device information
+        });
+    }, [navigate, location.state]);
 
     const dataURLtoBlob = async (dataurl) => {
         const res = await fetch(dataurl);
@@ -829,6 +880,7 @@ const useScannerController = () => {
         setAccessionNumber,
         videoConstraints,
         clearError,
+        handleUserMedia,
         handleCapture,
         initializeCorners,
         handleCornerClick,
@@ -845,7 +897,8 @@ const useScannerController = () => {
         deviceModality,
         setDeviceModality,
         sendResult,
-        setSendResult
+        setSendResult,
+        navigateToPatientSelection
     };
 };
 
