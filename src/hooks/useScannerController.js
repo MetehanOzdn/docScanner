@@ -23,6 +23,11 @@ const useScannerController = () => {
     const [deviceModality, setDeviceModality] = useState('SFT'); // Default modality
     const [sendResult, setSendResult] = useState(null); // New state for send results
 
+    // New state variables for drag functionality
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+    const [draggingCornerIndex, setDraggingCornerIndex] = useState(null);
+
     const location = useLocation();
     const navigate = useNavigate();
 
@@ -67,12 +72,18 @@ const useScannerController = () => {
 
     const videoConstraints = {
         facingMode: "environment",
-        // High-quality settings for mobile photography
-        width: { min: 1920, ideal: 3840, max: 4096 },
-        height: { min: 1080, ideal: 2160, max: 4096 },
+        // Maximum quality settings for mobile and desktop cameras
+        width: { min: 1920, ideal: 4096, max: 8192 },
+        height: { min: 1080, ideal: 2160, max: 8192 },
         frameRate: { ideal: 30, max: 60 },
-        // Let camera choose its native aspect ratio for best quality
-        aspectRatio: { ideal: 4 / 3 }, // 4:3 is common for high-res phone cameras
+        // Request highest possible resolution
+        aspectRatio: { ideal: 4 / 3 },
+        // Advanced constraint for better quality
+        advanced: [
+            { width: { min: 3840 } },
+            { height: { min: 2160 } },
+            { frameRate: { min: 30 } }
+        ]
     };
 
     const clearError = () => setError(null);
@@ -99,7 +110,7 @@ const useScannerController = () => {
             return;
         }
 
-        // Always try to capture at maximum quality
+        // Always try to capture at maximum possible quality
         const { width: streamWidth, height: streamHeight } = actualCameraDimensions;
         let imageSrc;
 
@@ -112,13 +123,13 @@ const useScannerController = () => {
             });
             console.log(`Capturing at native resolution: ${streamWidth}x${streamHeight} with max quality`);
         } else {
-            // Fallback to high-quality capture with estimated dimensions
+            // Enhanced fallback to even higher quality capture
             imageSrc = webcamRef.current.getScreenshot({
-                width: 3840, // 4K width
-                height: 2160, // 4K height
+                width: 4096, // Increased from 3840 to 4096
+                height: 2304, // Increased proportionally (4096 * 9/16)
                 quality: 1.0 // Maximum quality
             });
-            console.log('Capturing at 4K resolution with max quality');
+            console.log('Capturing at enhanced 4K+ resolution with max quality');
         }
 
         if (!imageSrc) {
@@ -129,6 +140,8 @@ const useScannerController = () => {
         setMode('edit');
         setCorners([]);
         setActiveCornerIndex(null);
+        setIsDragging(false);
+        setDraggingCornerIndex(null);
         clearError();
     }, [webcamRef, actualCameraDimensions]);
 
@@ -167,8 +180,98 @@ const useScannerController = () => {
         img.src = capturedImage;
     }, [capturedImage]);
 
+    const handleCornerMouseDown = useCallback((index, e) => {
+        e.stopPropagation();
+        e.preventDefault();
+
+        if (!imageRef.current) return;
+
+        const imageElement = imageRef.current;
+        const rect = imageElement.getBoundingClientRect();
+
+        // Support both mouse and touch events
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+        const corner = corners[index];
+        const offsetX = clientX - rect.left - corner.x;
+        const offsetY = clientY - rect.top - corner.y;
+
+        setIsDragging(true);
+        setDraggingCornerIndex(index);
+        setDragOffset({ x: offsetX, y: offsetY });
+        setActiveCornerIndex(index);
+
+        // Prevent text selection and other browser behaviors
+        document.body.style.userSelect = 'none';
+        document.body.style.webkitUserSelect = 'none';
+    }, [corners]);
+
+    const handleMouseMove = useCallback((e) => {
+        if (!isDragging || draggingCornerIndex === null || !imageRef.current) return;
+
+        e.preventDefault();
+
+        const imageElement = imageRef.current;
+        const rect = imageElement.getBoundingClientRect();
+
+        // Support both mouse and touch events
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+        let newX = clientX - rect.left - dragOffset.x;
+        let newY = clientY - rect.top - dragOffset.y;
+
+        // Constrain to image boundaries
+        newX = Math.max(0, Math.min(newX, imageElement.offsetWidth));
+        newY = Math.max(0, Math.min(newY, imageElement.offsetHeight));
+
+        setCorners(prevCorners =>
+            prevCorners.map((corner, i) =>
+                i === draggingCornerIndex ? { x: newX, y: newY } : corner
+            )
+        );
+    }, [isDragging, draggingCornerIndex, dragOffset]);
+
+    const handleMouseUp = useCallback((e) => {
+        if (isDragging) {
+            e.preventDefault();
+            setIsDragging(false);
+            setDraggingCornerIndex(null);
+            setDragOffset({ x: 0, y: 0 });
+
+            // Restore text selection
+            document.body.style.userSelect = '';
+            document.body.style.webkitUserSelect = '';
+        }
+    }, [isDragging]);
+
+    // Add global event listeners for mouse/touch events
+    useEffect(() => {
+        if (isDragging) {
+            const handleGlobalMouseMove = (e) => handleMouseMove(e);
+            const handleGlobalMouseUp = (e) => handleMouseUp(e);
+            const handleGlobalTouchMove = (e) => handleMouseMove(e);
+            const handleGlobalTouchEnd = (e) => handleMouseUp(e);
+
+            document.addEventListener('mousemove', handleGlobalMouseMove);
+            document.addEventListener('mouseup', handleGlobalMouseUp);
+            document.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
+            document.addEventListener('touchend', handleGlobalTouchEnd);
+
+            return () => {
+                document.removeEventListener('mousemove', handleGlobalMouseMove);
+                document.removeEventListener('mouseup', handleGlobalMouseUp);
+                document.removeEventListener('touchmove', handleGlobalTouchMove);
+                document.removeEventListener('touchend', handleGlobalTouchEnd);
+            };
+        }
+    }, [isDragging, handleMouseMove, handleMouseUp]);
+
+    // Legacy click handler - kept for backward compatibility but simplified
     const handleCornerClick = (index, e) => {
         e.stopPropagation();
+        // Just toggle active state for visual feedback
         if (activeCornerIndex === index) {
             setActiveCornerIndex(null);
         } else {
@@ -176,7 +279,11 @@ const useScannerController = () => {
         }
     };
 
+    // Legacy image area click handler - kept for backward compatibility
     const handleImageAreaClick = useCallback((e) => {
+        // Only work if not currently dragging
+        if (isDragging) return;
+
         if (activeCornerIndex === null || !imageRef.current) {
             return;
         }
@@ -196,7 +303,7 @@ const useScannerController = () => {
             )
         );
         setActiveCornerIndex(null);
-    }, [activeCornerIndex, imageRef, setCorners, setActiveCornerIndex]);
+    }, [activeCornerIndex, imageRef, setCorners, setActiveCornerIndex, isDragging]);
 
     const drawPreview = useCallback(() => {
         if (!previewCanvasRef.current || !imageRef.current || corners.length !== 4 || mode !== 'edit') {
@@ -574,6 +681,19 @@ const useScannerController = () => {
         });
     }, [navigate, location.state]);
 
+    const navigateToMainScreen = useCallback(() => {
+        // Clear all state and navigate to main screen (devices list)
+        setPatientId('');
+        setAccessionNumber('');
+        setCurrentPatientDetails(null);
+        setGeneratedImages([]);
+        resetState();
+        setSendResult(null);
+
+        // Navigate to main screen (devices list)
+        navigate('/devices');
+    }, [navigate]);
+
     const dataURLtoBlob = async (dataurl) => {
         const res = await fetch(dataurl);
         const blob = await res.blob();
@@ -885,6 +1005,9 @@ const useScannerController = () => {
         initializeCorners,
         handleCornerClick,
         handleImageAreaClick,
+        handleCornerMouseDown,
+        handleMouseMove,
+        handleMouseUp,
         drawPreview,
         handleApprovePdf,
         handleDownloadImage,
@@ -898,7 +1021,14 @@ const useScannerController = () => {
         setDeviceModality,
         sendResult,
         setSendResult,
-        navigateToPatientSelection
+        navigateToPatientSelection,
+        navigateToMainScreen,
+        isDragging,
+        setIsDragging,
+        dragOffset,
+        setDragOffset,
+        draggingCornerIndex,
+        setDraggingCornerIndex
     };
 };
 

@@ -30,6 +30,16 @@ const PatientList = () => {
                     </div>
                 )}
 
+                {/* Back to Main Screen Button */}
+                <div style={styles.backButtonContainer}>
+                    <button
+                        onClick={() => navigate('/devices')}
+                        style={styles.backButton}
+                    >
+                        ← Ana Ekrana Dön
+                    </button>
+                </div>
+
                 {/* Date Filter Inputs */}
                 <div style={styles.filterContainer}>
                     <div style={styles.dateGroup}>
@@ -323,6 +333,23 @@ const styles = {
         fontSize: '0.85em',
         color: '#777',
         borderTop: '1px solid #ddd',
+    },
+    backButtonContainer: {
+        display: 'flex',
+        justifyContent: 'center',
+        marginBottom: '10px',
+    },
+    backButton: {
+        padding: '8px 20px',
+        borderRadius: '4px',
+        border: 'none',
+        backgroundColor: '#1976d2',
+        color: 'white',
+        cursor: 'pointer',
+        fontSize: '0.9em',
+        fontWeight: '500',
+        transition: 'background-color 0.2s',
+        height: '40px',
     },
 };
 

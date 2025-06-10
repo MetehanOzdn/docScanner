@@ -26,6 +26,9 @@ const Scanner = () => {
         initializeCorners,
         handleCornerClick,
         handleImageAreaClick,
+        handleCornerMouseDown,
+        handleMouseMove,
+        handleMouseUp,
         handleApprovePdf,
         handleDownloadImage,
         resetState,
@@ -36,7 +39,10 @@ const Scanner = () => {
         initialUrlCheckComplete,
         sendResult,
         setSendResult,
-        navigateToPatientSelection
+        navigateToPatientSelection,
+        navigateToMainScreen,
+        isDragging,
+        draggingCornerIndex
     } = useScannerController();
 
     const renderCaptureModeContent = () => (
@@ -86,11 +92,11 @@ const Scanner = () => {
     const renderEditModeContent = () => (
         <div style={styles.editContainer}>
             <h2 style={styles.title}>Adım 2: Köşeleri Ayarla</h2>
-            <p style={styles.instructions}>Köşeye dokunarak seçin, sonra resim üzerinde istediğiniz yere dokunarak yerleştirin.</p>
+            <p style={styles.instructions}>Köşe noktalarını sürükleyerek belge sınırlarını ayarlayın. Dokunup kaydırın veya tıklayıp sürükleyin.</p>
             <div
                 style={{
                     ...styles.imagePreviewContainer,
-                    cursor: activeCornerIndex !== null ? 'crosshair' : 'default'
+                    cursor: isDragging ? 'grabbing' : 'default'
                 }}
                 id="imagePreviewContainer"
                 onClick={handleImageAreaClick}
@@ -116,8 +122,16 @@ const Scanner = () => {
                             ...styles.cornerPoint,
                             left: `${corner.x}px`,
                             top: `${corner.y}px`,
-                            backgroundColor: activeCornerIndex === index ? '#ff4500' : '#007bff',
+                            backgroundColor: draggingCornerIndex === index ? '#ff4500' :
+                                activeCornerIndex === index ? '#ffa500' : '#007bff',
+                            cursor: isDragging && draggingCornerIndex === index ? 'grabbing' : 'grab',
+                            transform: draggingCornerIndex === index ?
+                                'translate(-50%, -50%) scale(1.1)' :
+                                'translate(-50%, -50%) scale(1)',
+                            zIndex: draggingCornerIndex === index ? 20 : 10,
                         }}
+                        onMouseDown={(e) => handleCornerMouseDown(index, e)}
+                        onTouchStart={(e) => handleCornerMouseDown(index, e)}
                         onClick={(e) => handleCornerClick(index, e)}
                     >
                         {index + 1}
@@ -216,13 +230,21 @@ const Scanner = () => {
                             ×
                         </button>
 
-                        {/* Navigate to Patient Selection button - show for all result types */}
-                        <button
-                            onClick={navigateToPatientSelection}
-                            style={styles.navigateButton}
-                        >
-                            Hasta Seçimi Ekranına Dön
-                        </button>
+                        {/* Navigation buttons - show for all result types */}
+                        <div style={styles.navigationButtonsContainer}>
+                            <button
+                                onClick={navigateToPatientSelection}
+                                style={styles.navigateButton}
+                            >
+                                Hasta Seçimi Ekranına Dön
+                            </button>
+                            <button
+                                onClick={navigateToMainScreen}
+                                style={styles.navigateButtonSecondary}
+                            >
+                                Ana Ekrana Dön
+                            </button>
+                        </div>
                     </div>
                 )}
 
@@ -435,21 +457,31 @@ const styles = {
     },
     cornerPoint: {
         position: 'absolute',
-        width: '28px',
-        height: '28px',
+        width: '32px',
+        height: '32px',
         border: '3px solid white',
         borderRadius: '50%',
-        cursor: 'pointer',
+        cursor: 'grab',
         transform: 'translate(-50%, -50%)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         color: 'white',
-        fontSize: '11px',
+        fontSize: '12px',
         fontWeight: 'bold',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+        boxShadow: '0 3px 12px rgba(0,0,0,0.4)',
         zIndex: 10,
-        transition: 'background-color 0.2s ease, transform 0.1s ease',
+        transition: 'all 0.15s ease',
+        userSelect: 'none',
+        touchAction: 'none',
+        '&:hover': {
+            transform: 'translate(-50%, -50%) scale(1.05)',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+        },
+        '&:active': {
+            transform: 'translate(-50%, -50%) scale(1.1)',
+            cursor: 'grabbing',
+        }
     },
     button: {
         padding: '10px 15px',
@@ -665,6 +697,12 @@ const styles = {
         borderRadius: '50%',
         transition: 'opacity 0.2s',
     },
+    navigationButtonsContainer: {
+        display: 'flex',
+        gap: '10px',
+        marginTop: '12px',
+        flexWrap: 'wrap',
+    },
     navigateButton: {
         backgroundColor: '#17a2b8',
         color: 'white',
@@ -674,9 +712,23 @@ const styles = {
         fontSize: '1rem',
         fontWeight: '500',
         cursor: 'pointer',
-        marginTop: '12px',
         transition: 'background-color 0.2s',
-        width: '100%',
+        flex: '1',
+        minWidth: '180px',
+        boxSizing: 'border-box',
+    },
+    navigateButtonSecondary: {
+        backgroundColor: '#6c757d',
+        color: 'white',
+        border: 'none',
+        borderRadius: '6px',
+        padding: '10px 20px',
+        fontSize: '1rem',
+        fontWeight: '500',
+        cursor: 'pointer',
+        transition: 'background-color 0.2s',
+        flex: '1',
+        minWidth: '180px',
         boxSizing: 'border-box',
     },
     warningContainer: {
