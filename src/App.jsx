@@ -1,19 +1,19 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import Home from './pages/Home';
-import DocumentScanner from './pages/Scan';
-import PatientList from './pages/PatientList';
+import { Routes, Route } from 'react-router-dom';
 import DevicesList from './pages/DevicesList';
+import PatientList from './pages/PatientList';
+import Scan from './pages/Scan';
+import DocumentTypeSelection from './pages/DocumentTypeSelection';
+import PdfUpload from './pages/PdfUpload';
 
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate replace to="/devices" />} />
+      <Route path="/" element={<DevicesList />} />
       <Route path="/patients" element={<PatientList />} />
-      <Route path="/scan" element={<DocumentScanner />} />
-      <Route path="/devices" element={<DevicesList />} />
-      {/* You can add a route for Home if needed, e.g., for a different purpose or direct access */}
-      {/* <Route path="/home" element={<Home />} /> */}
+      <Route path="/document-type" element={<DocumentTypeSelection />} />
+      <Route path="/scan" element={<Scan />} />
+      <Route path="/pdf-upload" element={<PdfUpload />} />
     </Routes>
   );
 }

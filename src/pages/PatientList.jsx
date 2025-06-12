@@ -33,7 +33,7 @@ const PatientList = () => {
                 {/* Back to Main Screen Button */}
                 <div style={styles.backButtonContainer}>
                     <button
-                        onClick={() => navigate('/devices')}
+                        onClick={() => navigate('/')}
                         style={styles.backButton}
                     >
                         ← Ana Ekrana Dön
@@ -95,7 +95,7 @@ const PatientList = () => {
                         <div
                             key={patient.id}
                             style={styles.patientItem}
-                            onClick={() => navigate('/scan', { state: { patient, device } })}
+                            onClick={() => navigate('/document-type', { state: { patient, device } })}
                         >
                             <div style={{
                                 ...styles.genderAvatar,

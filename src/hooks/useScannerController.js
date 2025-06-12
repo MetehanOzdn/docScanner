@@ -31,6 +31,9 @@ const useScannerController = () => {
     const location = useLocation();
     const navigate = useNavigate();
 
+    // Get fileType from navigation state
+    const fileType = location.state?.fileType || 'image';
+
     useEffect(() => {
         const params = new URLSearchParams(location.search);
         const pIdFromUrl = params.get('patientId');
@@ -66,6 +69,7 @@ const useScannerController = () => {
 
         console.log('Final Patient ID:', finalPatientId);
         console.log('Final Accession Number:', finalAccessionNumber);
+        console.log('File Type:', fileType);
 
         setInitialUrlCheckComplete(true); // Indicate that the URL/state check is done
     }, [location.search, location.state]); // Runs when location.search or location.state changes
@@ -770,7 +774,8 @@ const useScannerController = () => {
                             metadata: {
                                 PatientId: patientId,
                                 AccessioNumber: accessionNumber,
-                                FileName: `${image.name}.jpeg`
+                                FileName: `${image.name}.jpeg`,
+                                FileType: fileType
                             },
                             file: base64Data
                         };
@@ -884,7 +889,8 @@ const useScannerController = () => {
                         AdmissionId: currentPatientDetails?.AdmissionId || "",
                         OtherPatientIds: currentPatientDetails?.OtherPatientIds || "",
                         Modality: deviceModality,
-                        StudyDate: formattedStudyDate
+                        StudyDate: formattedStudyDate,
+                        FileType: fileType
                     };
 
                     console.log("Current patient details for DICOM send:", currentPatientDetails);

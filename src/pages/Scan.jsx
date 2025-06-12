@@ -11,6 +11,9 @@ export default function ScanPage() {
     const [uploadResult, setUploadResult] = useState(null);
     const location = useLocation();
 
+    // Get fileType from navigation state
+    const fileType = location.state?.fileType || 'image';
+
     useEffect(() => {
         // Initialize patientId and accessionNumber from location state or URL params
 
@@ -93,7 +96,8 @@ export default function ScanPage() {
                         metadata: {
                             PatientId: patientId,
                             AccessioNumber: accessionNumber,
-                            FileName: fileObject.name
+                            FileName: fileObject.name,
+                            //    FileType: fileType
                         },
                         file: base64Data
                     };
